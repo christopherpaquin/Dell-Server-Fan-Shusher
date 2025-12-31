@@ -549,6 +549,7 @@ def determine_fan_action(gpu_temps, system_temps):
         return ('auto', None)
     
     # Determine fan speed based on critical thresholds
+    # Checks from highest to lowest temperature
     if max_gpu_temp >= GPU_TEMP_CRITICAL or max_system_temp >= SYSTEM_TEMP_CRITICAL:
         return ('manual', FAN_SPEED_CRITICAL)
     elif max_gpu_temp >= GPU_TEMP_HIGH or max_system_temp >= SYSTEM_TEMP_HIGH:
@@ -556,7 +557,7 @@ def determine_fan_action(gpu_temps, system_temps):
     elif max_gpu_temp >= GPU_TEMP_MED or max_system_temp >= SYSTEM_TEMP_MED:
         return ('manual', FAN_SPEED_MED)
     elif max_gpu_temp >= GPU_TEMP_LOW or max_system_temp >= SYSTEM_TEMP_LOW:
-        return ('manual', FAN_SPEED_MED)
+        return ('manual', FAN_SPEED_LOW)  # Use LOW speed between LOW and MED thresholds
     else:
         return ('manual', FAN_SPEED_LOW)
 
