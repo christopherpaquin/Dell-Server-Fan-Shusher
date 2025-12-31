@@ -1,0 +1,12 @@
+# Example crontab entry to run fan control every 30 seconds
+# Add this to your crontab with: crontab -e
+# Note: cron has a minimum interval of 1 minute, so for 30-second intervals,
+# you'll need to use two entries offset by 30 seconds
+
+# Run every minute at :00 and :30
+* * * * * /usr/bin/python3 /home/cpaquin/dell-r730-fan-control-gpu-aware/fan_control.py
+* * * * * sleep 30; /usr/bin/python3 /home/cpaquin/dell-r730-fan-control-gpu-aware/fan_control.py
+
+# Or run every 5 minutes (simpler)
+# */5 * * * * /usr/bin/python3 /home/cpaquin/dell-r730-fan-control-gpu-aware/fan_control.py
+

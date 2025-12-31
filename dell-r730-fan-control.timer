@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Dell R730 Fan Control every 30 seconds
+Requires=dell-r730-fan-control.service
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+

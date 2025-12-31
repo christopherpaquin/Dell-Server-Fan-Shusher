@@ -1,0 +1,17 @@
+[Unit]
+Description=Dell R730 Fan Control - GPU Aware
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/cpaquin/dell-r730-fan-control-gpu-aware
+# Note: EnvironmentFile removed due to SELinux restrictions
+# The script loads .env file itself using python-dotenv
+ExecStart=/usr/bin/python3 /home/cpaquin/dell-r730-fan-control-gpu-aware/fan_control.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
