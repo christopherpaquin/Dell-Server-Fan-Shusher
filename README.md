@@ -336,13 +336,33 @@ python3 fan_control.py --help
 
 ### 2. Mode Decision
 
-| Temperature Range | Action |
-|-------------------|--------|
-| **Below Low Threshold** | Manual mode, low fan speed (quiet) |
-| **Low to Medium** | Manual mode, medium fan speed |
-| **Medium to High** | Manual mode, high fan speed |
-| **High to Critical** | Manual mode, critical fan speed |
-| **Above Auto Mode Threshold** | Automatic mode (iDRAC takes over) |
+The script checks temperatures from highest to lowest and uses the first threshold that is exceeded. The logic works as follows:
+
+| Temperature Range | Fan Speed Used | Description |
+|-------------------|----------------|-------------|
+| **≥ Critical Threshold** | `FAN_SPEED_CRITICAL` | Maximum cooling required |
+| **≥ High Threshold** | `FAN_SPEED_HIGH` | High cooling needed |
+| **≥ Medium Threshold** | `FAN_SPEED_MED` | Moderate cooling |
+| **≥ Low Threshold** | `FAN_SPEED_LOW` | Low cooling (quiet operation) |
+| **< Low Threshold** | `FAN_SPEED_LOW` | Low cooling (quiet operation) |
+| **≥ Auto Mode Threshold** | Automatic mode | iDRAC takes over control |
+
+**Example with default thresholds:**
+- `SYSTEM_TEMP_LOW=40`, `SYSTEM_TEMP_MED=50`, `SYSTEM_TEMP_HIGH=60`, `SYSTEM_TEMP_CRITICAL=70`
+
+| Temperature | Fan Speed |
+|-------------|-----------|
+| **≥ 70°C** | Critical (80%) |
+| **≥ 60°C** | High (60%) |
+| **≥ 50°C** | Medium (40%) |
+| **≥ 40°C** | Low (20%) |
+| **< 40°C** | Low (20%) |
+
+**Important Notes:**
+- The script uses the **highest** temperature detected (either GPU or system) to determine fan speed
+- When temperature is between LOW and MED thresholds, it uses **LOW** fan speed for quiet operation
+- If temperature exceeds the `AUTO_MODE_THRESHOLD`, the script switches to automatic mode and lets iDRAC handle fan control
+- The script checks thresholds from highest to lowest, so the first threshold exceeded determines the fan speed
 
 ### 3. Fan Speed Adjustment
 
