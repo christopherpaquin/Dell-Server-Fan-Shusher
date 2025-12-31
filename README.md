@@ -197,6 +197,12 @@ FAN_SPEED_CRITICAL=80
 # Switch to automatic mode when temps exceed this threshold
 AUTO_MODE_THRESHOLD=75
 
+# GPU Temperature Priority Override
+# When enabled (true), GPU temperatures take priority over system temperatures
+# If GPU temps are above GPU_TEMP_LOW, they will be used for fan control
+# even if system temps are lower. This ensures fans respond to GPU heat.
+GPU_TEMP_OVERRIDE=true
+
 # Log file path
 LOG_FILE=/var/log/dell-r730-fan-control.log
 ```
@@ -363,6 +369,33 @@ The script checks temperatures from highest to lowest and uses the first thresho
 - When temperature is between LOW and MED thresholds, it uses **LOW** fan speed for quiet operation
 - If temperature exceeds the `AUTO_MODE_THRESHOLD`, the script switches to automatic mode and lets iDRAC handle fan control
 - The script checks thresholds from highest to lowest, so the first threshold exceeded determines the fan speed
+
+### GPU Temperature Priority Override
+
+By default, the script uses the **higher** of GPU or system temperature. However, you can enable **GPU Temperature Priority Override** to ensure GPU temperatures take priority when GPUs are under load.
+
+**How it works:**
+- When `GPU_TEMP_OVERRIDE=true` (default) and GPU temperature is ≥ `GPU_TEMP_LOW`:
+  - **GPU temperature is used** for fan control, even if system temperature is lower
+  - This ensures fans respond to GPU heat even when the rest of the system is cool
+  - GPU thresholds are used for determining fan speed
+
+**Example Scenario:**
+- GPU temp: 55°C (above `GPU_TEMP_LOW=50`)
+- System temp: 30°C (below `SYSTEM_TEMP_LOW=40`)
+- **With override enabled:** Fans use GPU temp (55°C) → MED speed (40%)
+- **With override disabled:** Fans use max temp (55°C) → MED speed (40%)
+
+**When GPU override is active:**
+- GPU temps ≥ `GPU_TEMP_LOW` trigger fan response
+- System temps are ignored for fan control (but still monitored)
+- All system fans spin up to cool the GPUs
+
+**Configuration:**
+```env
+# Enable GPU temperature priority (default: true)
+GPU_TEMP_OVERRIDE=true
+```
 
 ### 3. Fan Speed Adjustment
 

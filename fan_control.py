@@ -56,6 +56,11 @@ AUTO_MODE_THRESHOLD = int(os.getenv('AUTO_MODE_THRESHOLD', '75'))
 IPMI_TIMEOUT = int(os.getenv('IPMI_TIMEOUT', '20'))  # seconds
 IPMI_RETRIES = int(os.getenv('IPMI_RETRIES', '2'))  # number of retries
 
+# GPU Temperature Priority Override
+# When enabled, GPU temperatures take priority over system temperatures
+# If GPU temps are above GPU_TEMP_LOW, they will be used for fan control
+GPU_TEMP_OVERRIDE = os.getenv('GPU_TEMP_OVERRIDE', 'true').lower() in ('true', '1', 'yes', 'on')
+
 # Log file path
 LOG_FILE = os.getenv('LOG_FILE', '/var/log/dell-r730-fan-control.log')
 
@@ -542,7 +547,20 @@ def determine_fan_action(gpu_temps, system_temps):
     # Get maximum temperatures
     max_gpu_temp = max(gpu_temps) if gpu_temps else 0
     max_system_temp = max(system_temps) if system_temps else 0
-    max_temp = max(max_gpu_temp, max_system_temp)
+    
+    # GPU Temperature Priority Override logic
+    # If enabled and GPU temps are above LOW threshold, prioritize GPU temps
+    if GPU_TEMP_OVERRIDE and gpu_temps and max_gpu_temp >= GPU_TEMP_LOW:
+        # Use GPU temperature for fan control (GPU takes priority)
+        decision_temp = max_gpu_temp
+        temp_source = 'GPU'
+        use_gpu_thresholds = True
+        logger.debug(f"GPU override active: Using GPU temp {max_gpu_temp}°C (System: {max_system_temp}°C)")
+    else:
+        # Use the higher of GPU or system temperature (default behavior)
+        decision_temp = max(max_gpu_temp, max_system_temp)
+        temp_source = 'GPU' if max_gpu_temp >= max_system_temp else 'System'
+        use_gpu_thresholds = False
     
     # If temperatures exceed auto mode threshold, let iDRAC handle it
     if max_gpu_temp >= AUTO_MODE_THRESHOLD or max_system_temp >= AUTO_MODE_THRESHOLD:
@@ -550,16 +568,30 @@ def determine_fan_action(gpu_temps, system_temps):
     
     # Determine fan speed based on critical thresholds
     # Checks from highest to lowest temperature
-    if max_gpu_temp >= GPU_TEMP_CRITICAL or max_system_temp >= SYSTEM_TEMP_CRITICAL:
-        return ('manual', FAN_SPEED_CRITICAL)
-    elif max_gpu_temp >= GPU_TEMP_HIGH or max_system_temp >= SYSTEM_TEMP_HIGH:
-        return ('manual', FAN_SPEED_HIGH)
-    elif max_gpu_temp >= GPU_TEMP_MED or max_system_temp >= SYSTEM_TEMP_MED:
-        return ('manual', FAN_SPEED_MED)
-    elif max_gpu_temp >= GPU_TEMP_LOW or max_system_temp >= SYSTEM_TEMP_LOW:
-        return ('manual', FAN_SPEED_LOW)  # Use LOW speed between LOW and MED thresholds
+    if use_gpu_thresholds:
+        # Use GPU thresholds when GPU is prioritized
+        if decision_temp >= GPU_TEMP_CRITICAL:
+            return ('manual', FAN_SPEED_CRITICAL)
+        elif decision_temp >= GPU_TEMP_HIGH:
+            return ('manual', FAN_SPEED_HIGH)
+        elif decision_temp >= GPU_TEMP_MED:
+            return ('manual', FAN_SPEED_MED)
+        elif decision_temp >= GPU_TEMP_LOW:
+            return ('manual', FAN_SPEED_LOW)
+        else:
+            return ('manual', FAN_SPEED_LOW)
     else:
-        return ('manual', FAN_SPEED_LOW)
+        # Use both GPU and system thresholds (original behavior)
+        if max_gpu_temp >= GPU_TEMP_CRITICAL or max_system_temp >= SYSTEM_TEMP_CRITICAL:
+            return ('manual', FAN_SPEED_CRITICAL)
+        elif max_gpu_temp >= GPU_TEMP_HIGH or max_system_temp >= SYSTEM_TEMP_HIGH:
+            return ('manual', FAN_SPEED_HIGH)
+        elif max_gpu_temp >= GPU_TEMP_MED or max_system_temp >= SYSTEM_TEMP_MED:
+            return ('manual', FAN_SPEED_MED)
+        elif max_gpu_temp >= GPU_TEMP_LOW or max_system_temp >= SYSTEM_TEMP_LOW:
+            return ('manual', FAN_SPEED_LOW)  # Use LOW speed between LOW and MED thresholds
+        else:
+            return ('manual', FAN_SPEED_LOW)
 
 
 def check_temperatures():
