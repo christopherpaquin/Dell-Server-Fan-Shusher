@@ -166,6 +166,7 @@ Edit the `.env` file to configure all settings:
 | `FAN_SPEED_HIGH` | High fan speed percentage (0-100) | `60` |
 | `FAN_SPEED_CRITICAL` | Critical fan speed percentage (0-100) | `80` |
 | `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode (°C) | `75` |
+| `GPU_TEMP_OVERRIDE` | Prioritize GPU temps over system temps | `true` |
 | `LOG_FILE` | Log file path | `/var/log/dell-r730-fan-control.log` |
 
 ### Example Configuration
