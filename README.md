@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🖥️ Dell R730 Fan Control - GPU Aware
+# 🖥️ Dell Server Fan Shusher
 
 **Intelligent fan speed control for Dell R730 servers with multi-vendor GPU temperature monitoring**
 
-![Dell R730 Fan Control](https://static.wikia.nocookie.net/universalstudios/images/1/1e/Captain_smek132.png/revision/latest?cb=20201014154632)
+<img src="https://static.wikia.nocookie.net/universalstudios/images/1/1e/Captain_smek132.png/revision/latest?cb=20201014154632" alt="Dell Server Fan Shusher" width="50%">
 
 [![Python](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -460,6 +460,6 @@ This script is provided as-is for use with Dell R730 servers.
 
 **Made with ❤️ for Dell R730 server owners**
 
-[⬆ Back to Top](#-dell-r730-fan-control---gpu-aware)
+[⬆ Back to Top](#-dell-server-fan-shusher)
 
 </div>
