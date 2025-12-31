@@ -9,6 +9,8 @@
 [![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey.svg)](https://www.linux.org/)
 [![GPU Support](https://img.shields.io/badge/GPU-NVIDIA%20%7C%20AMD%20%7C%20Intel-orange.svg)]()
 
+**Repository:** [https://github.com/christopherpaquin/Dell-Server-Fan-Shusher](https://github.com/christopherpaquin/Dell-Server-Fan-Shusher)
+
 [Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Configuration](#-configuration) • [Troubleshooting](#-troubleshooting)
 
 </div>
@@ -110,8 +112,8 @@ The install script will:
 
 1. **Clone or download this repository**
    ```bash
-   git clone <repository-url>
-   cd dell-r730-fan-control-gpu-aware
+   git clone https://github.com/christopherpaquin/Dell-Server-Fan-Shusher.git
+   cd Dell-Server-Fan-Shusher
    ```
 
 2. **Install Python dependencies**

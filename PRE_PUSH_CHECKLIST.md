@@ -37,7 +37,7 @@
 
 ```bash
 # Navigate to the project directory
-cd dell-r730-fan-control-gpu-aware
+cd Dell-Server-Fan-Shusher
 
 # Initialize git (if not already done)
 git init
@@ -64,11 +64,11 @@ Features:
 - Comprehensive logging
 - SELinux compatible service file"
 
-# Add remote (replace with your GitHub repo URL)
-git remote add origin https://github.com/YOUR_USERNAME/dell-r730-fan-control-gpu-aware.git
+# Add remote
+git remote add origin https://github.com/christopherpaquin/Dell-Server-Fan-Shusher.git
 
 # Or if using SSH:
-# git remote add origin git@github.com:YOUR_USERNAME/dell-r730-fan-control-gpu-aware.git
+# git remote add origin git@github.com:christopherpaquin/Dell-Server-Fan-Shusher.git
 
 # Push to GitHub
 git branch -M main
