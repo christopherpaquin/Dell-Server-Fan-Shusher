@@ -169,7 +169,7 @@ def set_fan_speed(percentage):
     
     success, stdout, stderr = run_ipmi_command(['raw', '0x30', '0x30', '0x02', '0xff', hex_value])
     if success:
-        logger.info(f"Fan speed set to {percentage}%")
+        logger.debug(f"IPMI command successful: Fan speed set to {percentage}%")
         return True
     else:
         logger.error(f"Failed to set fan speed: {stderr}")
@@ -540,9 +540,10 @@ def get_fan_speeds():
 def determine_fan_action(gpu_temps, system_temps):
     """
     Determine what action to take based on temperatures.
-    Returns: (action, speed)
+    Returns: (action, speed, reason)
     - action: 'manual' or 'auto'
     - speed: fan speed percentage (only used if action is 'manual')
+    - reason: String explaining why this action was chosen
     """
     # Get maximum temperatures
     max_gpu_temp = max(gpu_temps) if gpu_temps else 0
@@ -564,34 +565,57 @@ def determine_fan_action(gpu_temps, system_temps):
     
     # If temperatures exceed auto mode threshold, let iDRAC handle it
     if max_gpu_temp >= AUTO_MODE_THRESHOLD or max_system_temp >= AUTO_MODE_THRESHOLD:
-        return ('auto', None)
+        reason = f"Temperature exceeds auto mode threshold ({AUTO_MODE_THRESHOLD}°C): GPU={max_gpu_temp}°C, System={max_system_temp}°C"
+        return ('auto', None, reason)
     
     # Determine fan speed based on critical thresholds
     # Checks from highest to lowest temperature
     if use_gpu_thresholds:
         # Use GPU thresholds when GPU is prioritized
         if decision_temp >= GPU_TEMP_CRITICAL:
-            return ('manual', FAN_SPEED_CRITICAL)
+            reason = f"GPU temperature {decision_temp}°C >= CRITICAL threshold ({GPU_TEMP_CRITICAL}°C) - GPU override active"
+            return ('manual', FAN_SPEED_CRITICAL, reason)
         elif decision_temp >= GPU_TEMP_HIGH:
-            return ('manual', FAN_SPEED_HIGH)
+            reason = f"GPU temperature {decision_temp}°C >= HIGH threshold ({GPU_TEMP_HIGH}°C) - GPU override active"
+            return ('manual', FAN_SPEED_HIGH, reason)
         elif decision_temp >= GPU_TEMP_MED:
-            return ('manual', FAN_SPEED_MED)
+            reason = f"GPU temperature {decision_temp}°C >= MEDIUM threshold ({GPU_TEMP_MED}°C) - GPU override active"
+            return ('manual', FAN_SPEED_MED, reason)
         elif decision_temp >= GPU_TEMP_LOW:
-            return ('manual', FAN_SPEED_LOW)
+            reason = f"GPU temperature {decision_temp}°C >= LOW threshold ({GPU_TEMP_LOW}°C) - GPU override active"
+            return ('manual', FAN_SPEED_LOW, reason)
         else:
-            return ('manual', FAN_SPEED_LOW)
+            reason = f"GPU temperature {decision_temp}°C < LOW threshold ({GPU_TEMP_LOW}°C) - GPU override active"
+            return ('manual', FAN_SPEED_LOW, reason)
     else:
         # Use both GPU and system thresholds (original behavior)
         if max_gpu_temp >= GPU_TEMP_CRITICAL or max_system_temp >= SYSTEM_TEMP_CRITICAL:
-            return ('manual', FAN_SPEED_CRITICAL)
+            if max_gpu_temp >= GPU_TEMP_CRITICAL:
+                reason = f"GPU temperature {max_gpu_temp}°C >= CRITICAL threshold ({GPU_TEMP_CRITICAL}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= CRITICAL threshold ({SYSTEM_TEMP_CRITICAL}°C)"
+            return ('manual', FAN_SPEED_CRITICAL, reason)
         elif max_gpu_temp >= GPU_TEMP_HIGH or max_system_temp >= SYSTEM_TEMP_HIGH:
-            return ('manual', FAN_SPEED_HIGH)
+            if max_gpu_temp >= GPU_TEMP_HIGH:
+                reason = f"GPU temperature {max_gpu_temp}°C >= HIGH threshold ({GPU_TEMP_HIGH}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= HIGH threshold ({SYSTEM_TEMP_HIGH}°C)"
+            return ('manual', FAN_SPEED_HIGH, reason)
         elif max_gpu_temp >= GPU_TEMP_MED or max_system_temp >= SYSTEM_TEMP_MED:
-            return ('manual', FAN_SPEED_MED)
+            if max_gpu_temp >= GPU_TEMP_MED:
+                reason = f"GPU temperature {max_gpu_temp}°C >= MEDIUM threshold ({GPU_TEMP_MED}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= MEDIUM threshold ({SYSTEM_TEMP_MED}°C)"
+            return ('manual', FAN_SPEED_MED, reason)
         elif max_gpu_temp >= GPU_TEMP_LOW or max_system_temp >= SYSTEM_TEMP_LOW:
-            return ('manual', FAN_SPEED_LOW)  # Use LOW speed between LOW and MED thresholds
+            if max_gpu_temp >= GPU_TEMP_LOW:
+                reason = f"GPU temperature {max_gpu_temp}°C >= LOW threshold ({GPU_TEMP_LOW}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= LOW threshold ({SYSTEM_TEMP_LOW}°C)"
+            return ('manual', FAN_SPEED_LOW, reason)  # Use LOW speed between LOW and MED thresholds
         else:
-            return ('manual', FAN_SPEED_LOW)
+            reason = f"Temperatures below all thresholds (GPU: {max_gpu_temp}°C, System: {max_system_temp}°C)"
+            return ('manual', FAN_SPEED_LOW, reason)
 
 
 def check_temperatures():
@@ -866,26 +890,57 @@ Examples:
     else:
         logger.warning("System Temperatures: Unable to read")
     
+    # Get current fan speeds before making changes (for comparison)
+    current_fan_speeds = get_fan_speeds()
+    current_fan_speed_pct = None
+    if current_fan_speeds:
+        avg_current_speed = sum(current_fan_speeds) // len(current_fan_speeds)
+        logger.info(f"Current Fan Speeds: {', '.join(map(str, current_fan_speeds))} RPM (avg: {avg_current_speed} RPM)")
+    
     # Determine action
-    action, speed = determine_fan_action(gpu_temps, system_temps)
+    action, speed, reason = determine_fan_action(gpu_temps, system_temps)
+    
+    # Log the decision reasoning
+    logger.info(f"Decision: {reason}")
     
     # Execute action
     if action == 'auto':
-        logger.info(f"Temperatures high (max: {max(max(gpu_temps) if gpu_temps else 0, max(system_temps) if system_temps else 0)}°C). Enabling automatic fan control.")
+        logger.info(f"ACTION: Switching to AUTOMATIC mode - iDRAC will control fans")
+        logger.info(f"Reason: {reason}")
         enable_automatic_fan_mode()
     else:
         # Enable manual mode and set fan speed
         if enable_manual_fan_mode():
-            set_fan_speed(speed)
-            logger.info(f"Manual mode active. Fan speed set to {speed}%")
+            # Determine if fan speed is increasing or decreasing
+            speed_change = ""
+            if current_fan_speeds:
+                # Estimate current percentage (rough approximation)
+                # Fan speeds vary, so we'll just note the change
+                speed_change = f" (Target: {speed}%)"
+            
+            logger.info(f"ACTION: Setting fan speed to {speed}%{speed_change}")
+            logger.info(f"Reason: {reason}")
+            
+            if set_fan_speed(speed):
+                # Get fan speeds after change to confirm
+                new_fan_speeds = get_fan_speeds()
+                if new_fan_speeds:
+                    avg_new_speed = sum(new_fan_speeds) // len(new_fan_speeds)
+                    if current_fan_speeds:
+                        avg_old_speed = sum(current_fan_speeds) // len(current_fan_speeds)
+                        if avg_new_speed > avg_old_speed:
+                            logger.info(f"Fan speed INCREASED: {avg_old_speed} RPM → {avg_new_speed} RPM")
+                        elif avg_new_speed < avg_old_speed:
+                            logger.info(f"Fan speed DECREASED: {avg_old_speed} RPM → {avg_new_speed} RPM")
+                        else:
+                            logger.info(f"Fan speed UNCHANGED: {avg_new_speed} RPM")
+                    else:
+                        logger.info(f"Fan speeds after change: {', '.join(map(str, new_fan_speeds))} RPM (avg: {avg_new_speed} RPM)")
+            else:
+                logger.error("Failed to set fan speed")
         else:
             logger.error("Failed to enable manual mode")
             sys.exit(1)
-    
-    # Get current fan speeds for logging
-    fan_speeds = get_fan_speeds()
-    if fan_speeds:
-        logger.info(f"Current Fan Speeds: {', '.join(map(str, fan_speeds))}")
     
     logger.info("Check complete")
     logger.info("=" * 60)

@@ -56,7 +56,7 @@ A Python script that intelligently controls fan speeds on a Dell R730 server bas
 | 🌡️ **System Temperature Monitoring** | Monitors system temperatures via `ipmitool` |
 | ⚙️ **Adaptive Fan Control** | Automatically adjusts fan speeds based on temperature thresholds |
 | 🧠 **Smart Mode Switching** | Switches to automatic iDRAC control when temperatures are high |
-| 📝 **Comprehensive Logging** | All temperature checks and fan adjustments are logged to a file |
+| 📝 **Verbose Logging** | Detailed logging with decision reasoning, actions taken, and fan speed change tracking |
 | 🎛️ **Configurable Thresholds** | Customize temperature and fan speed settings via environment variables |
 | 🔇 **Low Noise Operation** | Keeps fans at minimum speed when temperatures are low |
 | 🔍 **Manual Check Modes** | Read-only modes to check temperatures and fan speeds without adjustments |
@@ -434,11 +434,41 @@ All operations are logged to the file specified in `LOG_FILE` (default: `/var/lo
 
 ### Log Contents
 
-- ✅ Timestamp of each check
-- ✅ GPU and system temperatures
-- ✅ Fan mode changes (manual/automatic)
-- ✅ Fan speed adjustments
-- ✅ Errors or warnings
+The script provides **comprehensive verbose logging** that includes:
+
+- ✅ **Timestamp** of each check
+- ✅ **Temperature readings** (GPU and system temperatures with maximum values)
+- ✅ **Current fan speeds** (before making changes)
+- ✅ **Decision reasoning** - Explains why each action was chosen:
+  - Which temperature threshold was triggered (LOW, MED, HIGH, CRITICAL)
+  - Whether GPU override is active
+  - Which temperature source (GPU vs System) triggered the decision
+- ✅ **Action taken** - Clear messages for:
+  - Switching to AUTOMATIC mode (with reason)
+  - Setting fan speed to a specific percentage (with reason)
+- ✅ **Fan speed changes** - Tracks before/after speeds:
+  - Shows INCREASED, DECREASED, or UNCHANGED
+  - Displays RPM values before and after changes
+- ✅ **Errors or warnings**
+
+### Example Log Output
+
+```
+============================================================
+Dell R730 Fan Control - GPU Aware - Starting check
+iDRAC IP: 10.1.10.20
+GPU Temperatures: 55, 58°C (max: 58°C)
+System Temperatures: 35, 38, 40°C (max: 40°C)
+Current Fan Speeds: 2400, 2450, 2380 RPM (avg: 2410 RPM)
+Decision: GPU temperature 58°C >= MEDIUM threshold (60°C) - GPU override active
+ACTION: Setting fan speed to 40% (Target: 40%)
+Reason: GPU temperature 58°C >= MEDIUM threshold (60°C) - GPU override active
+Manual fan mode enabled
+IPMI command successful: Fan speed set to 40%
+Fan speed INCREASED: 2410 RPM → 3200 RPM
+Check complete
+============================================================
+```
 
 ### View Logs
 
@@ -451,6 +481,12 @@ tail -f /var/log/dell-r730-fan-control.log
 
 # View with timestamps
 tail -f /var/log/dell-r730-fan-control.log | grep -E "GPU|System|Fan"
+
+# View only actions and decisions
+tail -f /var/log/dell-r730-fan-control.log | grep -E "ACTION|Decision|Reason"
+
+# View fan speed changes
+tail -f /var/log/dell-r730-fan-control.log | grep -E "INCREASED|DECREASED|UNCHANGED"
 ```
 
 ---
