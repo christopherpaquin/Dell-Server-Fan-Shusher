@@ -30,6 +30,7 @@
 - [How It Works](#-how-it-works)
 - [GPU Support](#-gpu-support)
 - [Logging](#-logging)
+- [Scripts Reference](#-scripts-reference)
 - [Troubleshooting](#-troubleshooting)
 - [Uninstallation](#-uninstallation)
 - [License](#-license)
@@ -148,24 +149,39 @@ Edit the `.env` file to configure all settings:
 
 ### Configuration Options
 
+The system uses **7 temperature levels** for granular fan control, perfect for cold room scenarios where you want very low fan speeds at low temperatures.
+
 | Setting | Description | Default |
 |---------|-------------|----------|
 | `IDRAC_IP` | iDRAC IP address | `10.1.10.20` |
 | `IDRAC_USER` | iDRAC username | `root` |
 | `IDRAC_PASS` | iDRAC password | `calvin` |
-| `GPU_TEMP_LOW` | Low GPU temperature threshold (°C) | `50` |
-| `GPU_TEMP_MED` | Medium GPU temperature threshold (°C) | `60` |
-| `GPU_TEMP_HIGH` | High GPU temperature threshold (°C) | `70` |
-| `GPU_TEMP_CRITICAL` | Critical GPU temperature threshold (°C) | `80` |
-| `SYSTEM_TEMP_LOW` | Low system temperature threshold (°C) | `40` |
-| `SYSTEM_TEMP_MED` | Medium system temperature threshold (°C) | `50` |
-| `SYSTEM_TEMP_HIGH` | High system temperature threshold (°C) | `60` |
-| `SYSTEM_TEMP_CRITICAL` | Critical system temperature threshold (°C) | `70` |
-| `FAN_SPEED_LOW` | Low fan speed percentage (0-100) | `20` |
-| `FAN_SPEED_MED` | Medium fan speed percentage (0-100) | `40` |
-| `FAN_SPEED_HIGH` | High fan speed percentage (0-100) | `60` |
-| `FAN_SPEED_CRITICAL` | Critical fan speed percentage (0-100) | `80` |
-| `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode (°C) | `75` |
+| **GPU Temperature Thresholds (7 levels)** |
+| `GPU_TEMP_VERY_LOW` | Very-Low GPU temperature threshold (°C) | `35` |
+| `GPU_TEMP_LOW` | Low GPU temperature threshold (°C) | `45` |
+| `GPU_TEMP_MED_LOW` | Medium-Low GPU temperature threshold (°C) | `55` |
+| `GPU_TEMP_MED` | Medium GPU temperature threshold (°C) | `65` |
+| `GPU_TEMP_MED_HIGH` | Medium-High GPU temperature threshold (°C) | `75` |
+| `GPU_TEMP_HIGH` | High GPU temperature threshold (°C) | `85` |
+| `GPU_TEMP_VERY_HIGH` | Very-High GPU temperature threshold (°C) | `95` |
+| **System Temperature Thresholds (7 levels)** |
+| `SYSTEM_TEMP_VERY_LOW` | Very-Low system temperature threshold (°C) | `25` |
+| `SYSTEM_TEMP_LOW` | Low system temperature threshold (°C) | `35` |
+| `SYSTEM_TEMP_MED_LOW` | Medium-Low system temperature threshold (°C) | `45` |
+| `SYSTEM_TEMP_MED` | Medium system temperature threshold (°C) | `55` |
+| `SYSTEM_TEMP_MED_HIGH` | Medium-High system temperature threshold (°C) | `65` |
+| `SYSTEM_TEMP_HIGH` | High system temperature threshold (°C) | `75` |
+| `SYSTEM_TEMP_VERY_HIGH` | Very-High system temperature threshold (°C) | `85` |
+| **Fan Speed Percentages (7 levels)** |
+| `FAN_SPEED_VERY_LOW` | Very-Low fan speed percentage (0-100) | `10` |
+| `FAN_SPEED_LOW` | Low fan speed percentage (0-100) | `15` |
+| `FAN_SPEED_MED_LOW` | Medium-Low fan speed percentage (0-100) | `25` |
+| `FAN_SPEED_MED` | Medium fan speed percentage (0-100) | `35` |
+| `FAN_SPEED_MED_HIGH` | Medium-High fan speed percentage (0-100) | `50` |
+| `FAN_SPEED_HIGH` | High fan speed percentage (0-100) | `65` |
+| `FAN_SPEED_VERY_HIGH` | Very-High fan speed percentage (0-100) | `80` |
+| **Other Settings** |
+| `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode (°C) | Auto (max of Very-High thresholds) |
 | `GPU_TEMP_OVERRIDE` | Prioritize GPU temps over system temps | `true` |
 | `LOG_FILE` | Log file path | `/var/log/dell-r730-fan-control.log` |
 
@@ -177,26 +193,36 @@ IDRAC_IP=10.1.10.20
 IDRAC_USER=root
 IDRAC_PASS=your_secure_password
 
-# GPU Temperature Thresholds (Celsius)
-GPU_TEMP_LOW=50
-GPU_TEMP_MED=60
-GPU_TEMP_HIGH=70
-GPU_TEMP_CRITICAL=80
+# GPU Temperature Thresholds (Celsius) - 7 levels for granular control
+GPU_TEMP_VERY_LOW=35
+GPU_TEMP_LOW=45
+GPU_TEMP_MED_LOW=55
+GPU_TEMP_MED=65
+GPU_TEMP_MED_HIGH=75
+GPU_TEMP_HIGH=85
+GPU_TEMP_VERY_HIGH=95
 
-# System Temperature Thresholds (Celsius)
-SYSTEM_TEMP_LOW=40
-SYSTEM_TEMP_MED=50
-SYSTEM_TEMP_HIGH=60
-SYSTEM_TEMP_CRITICAL=70
+# System Temperature Thresholds (Celsius) - 7 levels for granular control
+SYSTEM_TEMP_VERY_LOW=25
+SYSTEM_TEMP_LOW=35
+SYSTEM_TEMP_MED_LOW=45
+SYSTEM_TEMP_MED=55
+SYSTEM_TEMP_MED_HIGH=65
+SYSTEM_TEMP_HIGH=75
+SYSTEM_TEMP_VERY_HIGH=85
 
-# Fan Speed Percentages (0-100)
-FAN_SPEED_LOW=20
-FAN_SPEED_MED=40
-FAN_SPEED_HIGH=60
-FAN_SPEED_CRITICAL=80
+# Fan Speed Percentages (0-100) - 7 levels matching temperature ranges
+# For cold room scenarios, lower speeds can be used for lower temperature ranges
+FAN_SPEED_VERY_LOW=10
+FAN_SPEED_LOW=15
+FAN_SPEED_MED_LOW=25
+FAN_SPEED_MED=35
+FAN_SPEED_MED_HIGH=50
+FAN_SPEED_HIGH=65
+FAN_SPEED_VERY_HIGH=80
 
 # Switch to automatic mode when temps exceed this threshold
-AUTO_MODE_THRESHOLD=75
+AUTO_MODE_THRESHOLD=95
 
 # GPU Temperature Priority Override
 # When enabled (true), GPU temperatures take priority over system temperatures
@@ -207,6 +233,22 @@ GPU_TEMP_OVERRIDE=true
 # Log file path
 LOG_FILE=/var/log/dell-r730-fan-control.log
 ```
+
+### Temperature Level Mapping
+
+The script checks temperatures from highest to lowest and uses the first threshold exceeded:
+
+| Temperature Range | Fan Speed Used | Description |
+|-------------------|----------------|-------------|
+| **≥ Very-High** | `FAN_SPEED_VERY_HIGH` (80%) | Maximum cooling required |
+| **≥ High** | `FAN_SPEED_HIGH` (65%) | High cooling needed |
+| **≥ Medium-High** | `FAN_SPEED_MED_HIGH` (50%) | Above-average cooling |
+| **≥ Medium** | `FAN_SPEED_MED` (35%) | Moderate cooling |
+| **≥ Medium-Low** | `FAN_SPEED_MED_LOW` (25%) | Light cooling |
+| **≥ Low** | `FAN_SPEED_LOW` (15%) | Minimal cooling (quiet) |
+| **≥ Very-Low** | `FAN_SPEED_VERY_LOW` (10%) | Very minimal cooling (very quiet) |
+| **< Very-Low** | `FAN_SPEED_VERY_LOW` (10%) | Very minimal cooling (very quiet) |
+| **≥ Auto Mode Threshold** | Automatic mode | iDRAC takes over control |
 
 ---
 
@@ -343,31 +385,25 @@ python3 fan_control.py --help
 
 ### 2. Mode Decision
 
-The script checks temperatures from highest to lowest and uses the first threshold that is exceeded. The logic works as follows:
-
-| Temperature Range | Fan Speed Used | Description |
-|-------------------|----------------|-------------|
-| **≥ Critical Threshold** | `FAN_SPEED_CRITICAL` | Maximum cooling required |
-| **≥ High Threshold** | `FAN_SPEED_HIGH` | High cooling needed |
-| **≥ Medium Threshold** | `FAN_SPEED_MED` | Moderate cooling |
-| **≥ Low Threshold** | `FAN_SPEED_LOW` | Low cooling (quiet operation) |
-| **< Low Threshold** | `FAN_SPEED_LOW` | Low cooling (quiet operation) |
-| **≥ Auto Mode Threshold** | Automatic mode | iDRAC takes over control |
+The script uses a **7-level temperature system** for granular fan control. It checks temperatures from highest to lowest and uses the first threshold that is exceeded.
 
 **Example with default thresholds:**
-- `SYSTEM_TEMP_LOW=40`, `SYSTEM_TEMP_MED=50`, `SYSTEM_TEMP_HIGH=60`, `SYSTEM_TEMP_CRITICAL=70`
+- System thresholds: Very-Low (25°C), Low (35°C), Medium-Low (45°C), Medium (55°C), Medium-High (65°C), High (75°C), Very-High (85°C)
 
-| Temperature | Fan Speed |
-|-------------|-----------|
-| **≥ 70°C** | Critical (80%) |
-| **≥ 60°C** | High (60%) |
-| **≥ 50°C** | Medium (40%) |
-| **≥ 40°C** | Low (20%) |
-| **< 40°C** | Low (20%) |
+| Temperature | Fan Speed | Percentage |
+|-------------|-----------|------------|
+| **≥ 85°C** | Very-High | 80% |
+| **≥ 75°C** | High | 65% |
+| **≥ 65°C** | Medium-High | 50% |
+| **≥ 55°C** | Medium | 35% |
+| **≥ 45°C** | Medium-Low | 25% |
+| **≥ 35°C** | Low | 15% |
+| **≥ 25°C** | Very-Low | 10% |
+| **< 25°C** | Very-Low | 10% |
 
 **Important Notes:**
 - The script uses the **highest** temperature detected (either GPU or system) to determine fan speed
-- When temperature is between LOW and MED thresholds, it uses **LOW** fan speed for quiet operation
+- The 7-level system provides fine-grained control, especially useful for cold room scenarios
 - If temperature exceeds the `AUTO_MODE_THRESHOLD`, the script switches to automatic mode and lets iDRAC handle fan control
 - The script checks thresholds from highest to lowest, so the first threshold exceeded determines the fan speed
 
@@ -379,18 +415,19 @@ By default, the script uses the **higher** of GPU or system temperature. However
 - When `GPU_TEMP_OVERRIDE=true` (default) and GPU temperature is ≥ `GPU_TEMP_LOW`:
   - **GPU temperature is used** for fan control, even if system temperature is lower
   - This ensures fans respond to GPU heat even when the rest of the system is cool
-  - GPU thresholds are used for determining fan speed
+  - GPU thresholds are used for determining fan speed (using the 7-level system)
 
 **Example Scenario:**
-- GPU temp: 55°C (above `GPU_TEMP_LOW=50`)
-- System temp: 30°C (below `SYSTEM_TEMP_LOW=40`)
-- **With override enabled:** Fans use GPU temp (55°C) → MED speed (40%)
-- **With override disabled:** Fans use max temp (55°C) → MED speed (40%)
+- GPU temp: 55°C (above `GPU_TEMP_LOW=45`, in Medium-Low range)
+- System temp: 30°C (below `SYSTEM_TEMP_LOW=35`)
+- **With override enabled:** Fans use GPU temp (55°C) → MEDIUM-LOW speed (25%)
+- **With override disabled:** Fans use max temp (55°C) → MEDIUM-LOW speed (25%)
 
 **When GPU override is active:**
 - GPU temps ≥ `GPU_TEMP_LOW` trigger fan response
 - System temps are ignored for fan control (but still monitored)
 - All system fans spin up to cool the GPUs
+- Uses GPU's 7-level temperature thresholds for fan speed determination
 
 **Configuration:**
 ```env
@@ -440,7 +477,7 @@ The script provides **comprehensive verbose logging** that includes:
 - ✅ **Temperature readings** (GPU and system temperatures with maximum values)
 - ✅ **Current fan speeds** (before making changes)
 - ✅ **Decision reasoning** - Explains why each action was chosen:
-  - Which temperature threshold was triggered (LOW, MED, HIGH, CRITICAL)
+  - Which temperature threshold was triggered (VERY-LOW, LOW, MEDIUM-LOW, MEDIUM, MEDIUM-HIGH, HIGH, VERY-HIGH)
   - Whether GPU override is active
   - Which temperature source (GPU vs System) triggered the decision
 - ✅ **Action taken** - Clear messages for:
@@ -460,12 +497,12 @@ iDRAC IP: 10.1.10.20
 GPU Temperatures: 55, 58°C (max: 58°C)
 System Temperatures: 35, 38, 40°C (max: 40°C)
 Current Fan Speeds: 2400, 2450, 2380 RPM (avg: 2410 RPM)
-Decision: GPU temperature 58°C >= MEDIUM threshold (60°C) - GPU override active
-ACTION: Setting fan speed to 40% (Target: 40%)
-Reason: GPU temperature 58°C >= MEDIUM threshold (60°C) - GPU override active
+Decision: GPU temperature 58°C >= MEDIUM-LOW threshold (55°C) - GPU override active
+ACTION: Setting fan speed to 25% (Target: 25%)
+Reason: GPU temperature 58°C >= MEDIUM-LOW threshold (55°C) - GPU override active
 Manual fan mode enabled
-IPMI command successful: Fan speed set to 40%
-Fan speed INCREASED: 2410 RPM → 3200 RPM
+IPMI command successful: Fan speed set to 25%
+Fan speed DECREASED: 2410 RPM → 1800 RPM
 Check complete
 ============================================================
 ```
@@ -520,6 +557,178 @@ sensors                                              # Generic
 sudo systemctl status dell-r730-fan-control.timer
 sudo journalctl -u dell-r730-fan-control.service -n 50
 ```
+
+---
+
+## 📜 Scripts Reference
+
+This repository contains several scripts for different purposes:
+
+### Main Scripts
+
+#### `fan_control.py`
+**Main fan control script** - The primary Python script that monitors temperatures and adjusts fan speeds automatically.
+
+**Usage:**
+```bash
+python3 fan_control.py              # Normal operation: check temps and adjust fans
+python3 fan_control.py --temps      # Check temperatures only (read-only)
+python3 fan_control.py --fans       # Check fan speeds only (read-only)
+python3 fan_control.py --history    # View temperature history
+```
+
+**Features:**
+- Monitors GPU and system temperatures
+- Automatically adjusts fan speeds based on 7-level temperature thresholds
+- Supports NVIDIA, AMD, and Intel GPUs
+- Comprehensive logging
+- Can run as a systemd service or cron job
+
+#### `install.sh`
+**Installation script** - Automated setup script that handles all installation tasks.
+
+**Usage:**
+```bash
+sudo ./install.sh
+```
+
+**What it does:**
+- Checks for required dependencies (python3, ipmitool)
+- Checks for GPU monitoring tools
+- Installs Python dependencies
+- Creates `.env` file from template
+- Sets proper permissions
+- Creates log directory
+- Sets up systemd service or cron job (your choice)
+- Performs a test run
+
+#### `uninstall.sh`
+**Uninstallation script** - Removes the service/cron jobs while keeping configuration files.
+
+**Usage:**
+```bash
+sudo ./uninstall.sh
+```
+
+**What it does:**
+- Stops and removes systemd service/timer (if installed)
+- Removes cron jobs (if installed)
+- Keeps the script and configuration files intact
+
+### Standalone Utility Scripts
+
+These scripts use the `ipmi_config.env` file for configuration (separate from the main `.env` file).
+
+#### `check_temperatures.sh`
+**Standalone temperature checker** - Reads and displays current system temperatures via IPMI.
+
+**Usage:**
+```bash
+./check_temperatures.sh
+```
+
+**What it does:**
+- Connects to iDRAC via IPMI
+- Queries all temperature sensors
+- Displays temperatures in both Celsius and Fahrenheit
+- Appends data to `temperature_log.txt` for historical tracking
+- **Read-only** - does not modify any settings
+
+**Configuration:**
+- Uses `ipmi_config.env` file (not `.env`)
+- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
+
+#### `check_fan_speeds.sh`
+**Standalone fan speed checker** - Reads and displays current fan speeds via IPMI.
+
+**Usage:**
+```bash
+./check_fan_speeds.sh
+```
+
+**What it does:**
+- Connects to iDRAC via IPMI
+- Queries all fan speed sensors
+- Displays fan speeds in RPM
+- Appends data to `fan_speed_log.txt` for historical tracking
+- **Read-only** - does not modify any settings
+
+**Configuration:**
+- Uses `ipmi_config.env` file (not `.env`)
+- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
+
+#### `control_fan_speed.sh`
+**Manual fan speed controller** - Allows manual control of fan speeds for testing or emergency situations.
+
+**Usage:**
+```bash
+./control_fan_speed.sh manual              # Switch to manual fan control mode
+./control_fan_speed.sh auto                # Switch back to automatic mode
+./control_fan_speed.sh set <percentage>    # Set fan speed (0-100%)
+./control_fan_speed.sh disable-third-party # Disable aggressive cooling for third-party hardware
+```
+
+**Examples:**
+```bash
+./control_fan_speed.sh set 20    # Set fans to 20% (quiet, monitor temps!)
+./control_fan_speed.sh set 30    # Set fans to 30% (moderate)
+./control_fan_speed.sh auto      # Return to automatic control
+```
+
+**What it does:**
+- Provides direct IPMI commands for fan control
+- Useful for testing or when the main script isn't running
+- **WARNING:** Always monitor temperatures when using manual control
+- Can disable third-party device cooling response (helps if non-Dell hardware causes high fan speeds)
+
+**Configuration:**
+- Uses `ipmi_config.env` file (not `.env`)
+- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
+
+#### `analyze_temperatures.sh`
+**Temperature analyzer** - Analyzes current temperatures and categorizes them based on Dell R730 specifications.
+
+**Usage:**
+```bash
+./analyze_temperatures.sh
+```
+
+**What it does:**
+- Runs `check_temperatures.sh` to get current temperatures
+- Categorizes each sensor as LOW, MEDIUM, HIGH, or CRITICAL
+- Uses color-coded output (green/yellow/red)
+- Applies different thresholds based on sensor type:
+  - **CPU/Processor**: LOW (<46°C), MEDIUM (46-65°C), HIGH (66-89°C), CRITICAL (≥90°C)
+  - **Inlet/Ambient**: LOW (<21°C), MEDIUM (21-30°C), HIGH (31-35°C), CRITICAL (>35°C)
+  - **System Board**: LOW (<40°C), MEDIUM (40-60°C), HIGH (61-80°C), CRITICAL (>80°C)
+- Displays reference thresholds at the end
+
+**Configuration:**
+- Uses `ipmi_config.env` file (not `.env`)
+- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
+
+### Configuration Files
+
+#### `.env`
+**Main configuration file** - Used by `fan_control.py` for all fan control settings.
+
+**Contains:**
+- iDRAC credentials
+- 7-level temperature thresholds (GPU and System)
+- 7-level fan speed settings
+- Auto mode threshold
+- GPU temperature override settings
+- Log file path
+
+#### `ipmi_config.env`
+**Standalone scripts configuration** - Used by the standalone shell scripts (`check_temperatures.sh`, `check_fan_speeds.sh`, `control_fan_speed.sh`, `analyze_temperatures.sh`).
+
+**Contains:**
+- `SERVER_IP` - iDRAC IP address
+- `IPMI_USERNAME` - iDRAC username
+- `IPMI_PASSWORD` - iDRAC password
+
+**Note:** This is separate from `.env` to allow different configurations if needed.
 
 ---
 
