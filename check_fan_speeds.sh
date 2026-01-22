@@ -56,27 +56,96 @@ if [ $? -ne 0 ] || [ -z "$FAN_DATA" ]; then
     exit 1
 fi
 
-# Format fan speeds on one line: timestamp, fan_name:rpm_value (repeated for each fan)
-OUTPUT_LINE="$TIMESTAMP"
+# Maximum RPM for percentage calculation (Dell R730 typical max is ~15,000-20,000 RPM)
+# Using 15,000 as a reasonable default for percentage calculation
+MAX_RPM=15000
+
+# Display formatted table with headers
+echo "Fan Name                    | RPM      | Speed %"
+echo "----------------------------|----------|--------"
+
+# Arrays to store data for summary
+declare -a FAN_NAMES
+declare -a RPM_VALUES
+declare -a PERCENTAGES
+
+# Process each fan
+FAN_COUNT=0
 while IFS= read -r line; do
     if [ -n "$line" ]; then
         # Extract fan name (first field before |)
-        fan_name=$(echo "$line" | awk -F'|' '{print $1}' | xargs | tr ' ' '_')
+        fan_name=$(echo "$line" | awk -F'|' '{print $1}' | xargs)
         # Extract RPM value (second field, get numeric value)
         rpm_value=$(echo "$line" | awk -F'|' '{print $2}' | grep -oE '[0-9]+\.?[0-9]*' | head -1)
+        
         if [ -n "$rpm_value" ]; then
-            OUTPUT_LINE="$OUTPUT_LINE | ${fan_name}:${rpm_value}"
+            # Convert RPM to integer for calculations (remove decimal part)
+            rpm_int=$(echo "$rpm_value" | cut -d. -f1)
+            
+            # Calculate percentage (rounded to 1 decimal place)
+            percent=$(echo "scale=1; ($rpm_int / $MAX_RPM) * 100" | bc)
+            # Ensure percentage doesn't exceed 100%
+            if (( $(echo "$percent > 100" | bc -l) )); then
+                percent=100.0
+            fi
+            
+            # Store for summary (use integer RPM for calculations)
+            FAN_NAMES[$FAN_COUNT]="$fan_name"
+            RPM_VALUES[$FAN_COUNT]=$rpm_int
+            PERCENTAGES[$FAN_COUNT]=$percent
+            
+            # Display formatted row (show original RPM value with decimals if present)
+            printf "%-27s | %8s | %6s%%\n" "$fan_name" "$rpm_value" "$percent"
+            
+            FAN_COUNT=$((FAN_COUNT + 1))
         fi
     fi
 done <<< "$FAN_DATA"
 
+echo "----------------------------|----------|--------"
+
+# Calculate and display summary statistics
+if [ $FAN_COUNT -gt 0 ]; then
+    # Calculate average RPM
+    total_rpm=0
+    total_percent=0
+    min_rpm=${RPM_VALUES[0]}
+    max_rpm=${RPM_VALUES[0]}
+    
+    for i in $(seq 0 $((FAN_COUNT - 1))); do
+        rpm=${RPM_VALUES[$i]}
+        total_rpm=$((total_rpm + rpm))
+        total_percent=$(echo "$total_percent + ${PERCENTAGES[$i]}" | bc)
+        
+        if [ "$rpm" -lt "$min_rpm" ]; then
+            min_rpm=$rpm
+        fi
+        if [ "$rpm" -gt "$max_rpm" ]; then
+            max_rpm=$rpm
+        fi
+    done
+    
+    avg_rpm=$((total_rpm / FAN_COUNT))
+    avg_percent=$(echo "scale=1; $total_percent / $FAN_COUNT" | bc)
+    
+    echo ""
+    echo "Summary:"
+    echo "  Total Fans: $FAN_COUNT"
+    echo "  Average RPM: $avg_rpm RPM (${avg_percent}%)"
+    echo "  Min RPM: $min_rpm RPM ($(echo "scale=1; ($min_rpm / $MAX_RPM) * 100" | bc)%)"
+    echo "  Max RPM: $max_rpm RPM ($(echo "scale=1; ($max_rpm / $MAX_RPM) * 100" | bc)%)"
+fi
+
+# Format fan speeds on one line for log file: timestamp, fan_name:rpm_value:percent (repeated for each fan)
+OUTPUT_LINE="$TIMESTAMP"
+for i in $(seq 0 $((FAN_COUNT - 1))); do
+    fan_name_log=$(echo "${FAN_NAMES[$i]}" | tr ' ' '_')
+    OUTPUT_LINE="$OUTPUT_LINE | ${fan_name_log}:${RPM_VALUES[$i]}RPM:${PERCENTAGES[$i]}%"
+done
+
 # Append to log file
 echo "$OUTPUT_LINE" >> "$LOG_FILE"
 
-# Also display to console
-echo "$FAN_DATA"
-echo ""
-echo "$OUTPUT_LINE"
 echo ""
 echo "Data appended to: $LOG_FILE"
 echo "=========================================="

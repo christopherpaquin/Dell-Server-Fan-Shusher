@@ -1,6 +1,13 @@
 # Environment file with credentials
 .env
+fan_speed_log.txt
+temperature_log.txt
+fan_control_data.log
 
+# Scripts directory logs and config
+Scripts/ipmi_config.env
+Scripts/temperature_log.txt
+Scripts/fan_speed_log.txt
 # Python
 __pycache__/
 *.py[cod]

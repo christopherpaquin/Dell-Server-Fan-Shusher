@@ -31,6 +31,8 @@
 - [GPU Support](#-gpu-support)
 - [Logging](#-logging)
 - [Scripts Reference](#-scripts-reference)
+- [Standalone Utility Scripts](#-standalone-utility-scripts)
+- [Adaptive Learning System](#-adaptive-learning-system)
 - [Troubleshooting](#-troubleshooting)
 - [Uninstallation](#-uninstallation)
 - [License](#-license)
@@ -157,7 +159,7 @@ The system uses **7 temperature levels** for granular fan control, perfect for c
 | `IDRAC_USER` | iDRAC username | `root` |
 | `IDRAC_PASS` | iDRAC password | `calvin` |
 | **GPU Temperature Thresholds (7 levels)** |
-| `GPU_TEMP_VERY_LOW` | Very-Low GPU temperature threshold (°C) | `35` |
+| `GPU_TEMP_VERY_LOW` | Very-Low GPU temperature threshold (°C) | `30` |
 | `GPU_TEMP_LOW` | Low GPU temperature threshold (°C) | `45` |
 | `GPU_TEMP_MED_LOW` | Medium-Low GPU temperature threshold (°C) | `55` |
 | `GPU_TEMP_MED` | Medium GPU temperature threshold (°C) | `65` |
@@ -166,12 +168,12 @@ The system uses **7 temperature levels** for granular fan control, perfect for c
 | `GPU_TEMP_VERY_HIGH` | Very-High GPU temperature threshold (°C) | `95` |
 | **System Temperature Thresholds (7 levels)** |
 | `SYSTEM_TEMP_VERY_LOW` | Very-Low system temperature threshold (°C) | `25` |
-| `SYSTEM_TEMP_LOW` | Low system temperature threshold (°C) | `35` |
-| `SYSTEM_TEMP_MED_LOW` | Medium-Low system temperature threshold (°C) | `45` |
-| `SYSTEM_TEMP_MED` | Medium system temperature threshold (°C) | `55` |
-| `SYSTEM_TEMP_MED_HIGH` | Medium-High system temperature threshold (°C) | `65` |
-| `SYSTEM_TEMP_HIGH` | High system temperature threshold (°C) | `75` |
-| `SYSTEM_TEMP_VERY_HIGH` | Very-High system temperature threshold (°C) | `85` |
+| `SYSTEM_TEMP_LOW` | Low system temperature threshold (°C) | `40` |
+| `SYSTEM_TEMP_MED_LOW` | Medium-Low system temperature threshold (°C) | `50` |
+| `SYSTEM_TEMP_MED` | Medium system temperature threshold (°C) | `60` |
+| `SYSTEM_TEMP_MED_HIGH` | Medium-High system temperature threshold (°C) | `70` |
+| `SYSTEM_TEMP_HIGH` | High system temperature threshold (°C) | `80` |
+| `SYSTEM_TEMP_VERY_HIGH` | Very-High system temperature threshold (°C) | `90` |
 | **Fan Speed Percentages (7 levels)** |
 | `FAN_SPEED_VERY_LOW` | Very-Low fan speed percentage (0-100) | `10` |
 | `FAN_SPEED_LOW` | Low fan speed percentage (0-100) | `15` |
@@ -194,7 +196,7 @@ IDRAC_USER=root
 IDRAC_PASS=your_secure_password
 
 # GPU Temperature Thresholds (Celsius) - 7 levels for granular control
-GPU_TEMP_VERY_LOW=35
+GPU_TEMP_VERY_LOW=30
 GPU_TEMP_LOW=45
 GPU_TEMP_MED_LOW=55
 GPU_TEMP_MED=65
@@ -204,12 +206,12 @@ GPU_TEMP_VERY_HIGH=95
 
 # System Temperature Thresholds (Celsius) - 7 levels for granular control
 SYSTEM_TEMP_VERY_LOW=25
-SYSTEM_TEMP_LOW=35
-SYSTEM_TEMP_MED_LOW=45
-SYSTEM_TEMP_MED=55
-SYSTEM_TEMP_MED_HIGH=65
-SYSTEM_TEMP_HIGH=75
-SYSTEM_TEMP_VERY_HIGH=85
+SYSTEM_TEMP_LOW=40
+SYSTEM_TEMP_MED_LOW=50
+SYSTEM_TEMP_MED=60
+SYSTEM_TEMP_MED_HIGH=70
+SYSTEM_TEMP_HIGH=80
+SYSTEM_TEMP_VERY_HIGH=90
 
 # Fan Speed Percentages (0-100) - 7 levels matching temperature ranges
 # For cold room scenarios, lower speeds can be used for lower temperature ranges
@@ -233,22 +235,6 @@ GPU_TEMP_OVERRIDE=true
 # Log file path
 LOG_FILE=/var/log/dell-r730-fan-control.log
 ```
-
-### Temperature Level Mapping
-
-The script checks temperatures from highest to lowest and uses the first threshold exceeded:
-
-| Temperature Range | Fan Speed Used | Description |
-|-------------------|----------------|-------------|
-| **≥ Very-High** | `FAN_SPEED_VERY_HIGH` (80%) | Maximum cooling required |
-| **≥ High** | `FAN_SPEED_HIGH` (65%) | High cooling needed |
-| **≥ Medium-High** | `FAN_SPEED_MED_HIGH` (50%) | Above-average cooling |
-| **≥ Medium** | `FAN_SPEED_MED` (35%) | Moderate cooling |
-| **≥ Medium-Low** | `FAN_SPEED_MED_LOW` (25%) | Light cooling |
-| **≥ Low** | `FAN_SPEED_LOW` (15%) | Minimal cooling (quiet) |
-| **≥ Very-Low** | `FAN_SPEED_VERY_LOW` (10%) | Very minimal cooling (very quiet) |
-| **< Very-Low** | `FAN_SPEED_VERY_LOW` (10%) | Very minimal cooling (very quiet) |
-| **≥ Auto Mode Threshold** | Automatic mode | iDRAC takes over control |
 
 ---
 
@@ -388,18 +374,19 @@ python3 fan_control.py --help
 The script uses a **7-level temperature system** for granular fan control. It checks temperatures from highest to lowest and uses the first threshold that is exceeded.
 
 **Example with default thresholds:**
-- System thresholds: Very-Low (25°C), Low (35°C), Medium-Low (45°C), Medium (55°C), Medium-High (65°C), High (75°C), Very-High (85°C)
+- System thresholds: Very-Low (25°C), Low (40°C), Medium-Low (50°C), Medium (60°C), Medium-High (70°C), High (80°C), Very-High (90°C)
 
-| Temperature | Fan Speed | Percentage |
-|-------------|-----------|------------|
-| **≥ 85°C** | Very-High | 80% |
-| **≥ 75°C** | High | 65% |
-| **≥ 65°C** | Medium-High | 50% |
-| **≥ 55°C** | Medium | 35% |
-| **≥ 45°C** | Medium-Low | 25% |
-| **≥ 35°C** | Low | 15% |
-| **≥ 25°C** | Very-Low | 10% |
-| **< 25°C** | Very-Low | 10% |
+| Temperature | Fan Speed | Percentage | Description |
+|-------------|-----------|------------|-------------|
+| **≥ 90°C** | Very-High | 80% | Maximum cooling required |
+| **≥ 80°C** | High | 65% | High cooling needed |
+| **≥ 70°C** | Medium-High | 50% | Above-average cooling |
+| **≥ 60°C** | Medium | 35% | Moderate cooling |
+| **≥ 50°C** | Medium-Low | 25% | Light cooling |
+| **≥ 40°C** | Low | 15% | Minimal cooling (quiet) |
+| **≥ 25°C** | Very-Low | 10% | Very minimal cooling (very quiet) |
+| **< 25°C** | Very-Low | 10% | Very minimal cooling (very quiet) |
+| **≥ Auto Mode Threshold** | Automatic mode | - | iDRAC takes over control |
 
 **Important Notes:**
 - The script uses the **highest** temperature detected (either GPU or system) to determine fan speed
@@ -419,7 +406,7 @@ By default, the script uses the **higher** of GPU or system temperature. However
 
 **Example Scenario:**
 - GPU temp: 55°C (above `GPU_TEMP_LOW=45`, in Medium-Low range)
-- System temp: 30°C (below `SYSTEM_TEMP_LOW=35`)
+- System temp: 30°C (below `SYSTEM_TEMP_LOW=40`)
 - **With override enabled:** Fans use GPU temp (55°C) → MEDIUM-LOW speed (25%)
 - **With override disabled:** Fans use max temp (55°C) → MEDIUM-LOW speed (25%)
 
@@ -437,11 +424,11 @@ GPU_TEMP_OVERRIDE=true
 
 ### 3. Fan Speed Adjustment
 
-When in manual mode, sets fan speed based on the highest temperature detected (GPU or system).
+When in manual mode, sets fan speed based on the highest temperature detected (GPU or system) using the 7-level threshold system.
 
 ### 4. Logging
 
-All temperature checks, mode changes, and fan speed adjustments are logged with timestamps.
+All temperature checks, mode changes, and fan speed adjustments are logged with timestamps to the configured log file.
 
 ---
 
@@ -617,13 +604,34 @@ sudo ./uninstall.sh
 
 ### Standalone Utility Scripts
 
-These scripts use the `ipmi_config.env` file for configuration (separate from the main `.env` file).
+The standalone utility scripts are located in the `Scripts/` directory. These scripts are independent of the main fan control system and use a separate configuration file.
 
-#### `check_temperatures.sh`
+**Location:** `Scripts/` directory
+
+**Setup:**
+1. Navigate to the Scripts directory:
+   ```bash
+   cd Scripts
+   ```
+
+2. Copy the example configuration:
+   ```bash
+   cp ipmi_config.env.example ipmi_config.env
+   ```
+
+3. Edit `ipmi_config.env` with your iDRAC credentials:
+   ```bash
+   nano ipmi_config.env
+   ```
+
+**Available Scripts:**
+
+#### `Scripts/check_temperatures.sh`
 **Standalone temperature checker** - Reads and displays current system temperatures via IPMI.
 
 **Usage:**
 ```bash
+cd Scripts
 ./check_temperatures.sh
 ```
 
@@ -634,34 +642,29 @@ These scripts use the `ipmi_config.env` file for configuration (separate from th
 - Appends data to `temperature_log.txt` for historical tracking
 - **Read-only** - does not modify any settings
 
-**Configuration:**
-- Uses `ipmi_config.env` file (not `.env`)
-- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
-
-#### `check_fan_speeds.sh`
-**Standalone fan speed checker** - Reads and displays current fan speeds via IPMI.
+#### `Scripts/check_fan_speeds.sh`
+**Standalone fan speed checker** - Reads and displays current fan speeds via IPMI with formatted table output.
 
 **Usage:**
 ```bash
+cd Scripts
 ./check_fan_speeds.sh
 ```
 
 **What it does:**
 - Connects to iDRAC via IPMI
 - Queries all fan speed sensors
-- Displays fan speeds in RPM
+- Displays fan speeds in a formatted table with columns: Fan Name, RPM, and Speed %
+- Shows summary statistics (total fans, average, min, max) with percentages
 - Appends data to `fan_speed_log.txt` for historical tracking
 - **Read-only** - does not modify any settings
 
-**Configuration:**
-- Uses `ipmi_config.env` file (not `.env`)
-- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
-
-#### `control_fan_speed.sh`
+#### `Scripts/control_fan_speed.sh`
 **Manual fan speed controller** - Allows manual control of fan speeds for testing or emergency situations.
 
 **Usage:**
 ```bash
+cd Scripts
 ./control_fan_speed.sh manual              # Switch to manual fan control mode
 ./control_fan_speed.sh auto                # Switch back to automatic mode
 ./control_fan_speed.sh set <percentage>    # Set fan speed (0-100%)
@@ -681,15 +684,12 @@ These scripts use the `ipmi_config.env` file for configuration (separate from th
 - **WARNING:** Always monitor temperatures when using manual control
 - Can disable third-party device cooling response (helps if non-Dell hardware causes high fan speeds)
 
-**Configuration:**
-- Uses `ipmi_config.env` file (not `.env`)
-- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
-
-#### `analyze_temperatures.sh`
+#### `Scripts/analyze_temperatures.sh`
 **Temperature analyzer** - Analyzes current temperatures and categorizes them based on Dell R730 specifications.
 
 **Usage:**
 ```bash
+cd Scripts
 ./analyze_temperatures.sh
 ```
 
@@ -697,20 +697,21 @@ These scripts use the `ipmi_config.env` file for configuration (separate from th
 - Runs `check_temperatures.sh` to get current temperatures
 - Categorizes each sensor as LOW, MEDIUM, HIGH, or CRITICAL
 - Uses color-coded output (green/yellow/red)
+- Displays temperatures in both Celsius and Fahrenheit
 - Applies different thresholds based on sensor type:
-  - **CPU/Processor**: LOW (<46°C), MEDIUM (46-65°C), HIGH (66-89°C), CRITICAL (≥90°C)
-  - **Inlet/Ambient**: LOW (<21°C), MEDIUM (21-30°C), HIGH (31-35°C), CRITICAL (>35°C)
+  - **CPU/Processor**: LOW (<46°C / <115°F), MEDIUM (46-65°C / 115-149°F), HIGH (66-89°C / 151-192°F), CRITICAL (≥90°C / ≥194°F)
+  - **Inlet/Ambient**: LOW (<21°C / <70°F), MEDIUM (21-30°C / 70-86°F), HIGH (31-35°C / 88-95°F), CRITICAL (>35°C / >95°F)
   - **System Board**: LOW (<40°C), MEDIUM (40-60°C), HIGH (61-80°C), CRITICAL (>80°C)
 - Displays reference thresholds at the end
 
-**Configuration:**
-- Uses `ipmi_config.env` file (not `.env`)
-- Requires: `SERVER_IP`, `IPMI_USERNAME`, `IPMI_PASSWORD`
+**For detailed documentation on these scripts, see:** `Scripts/README.md`
 
 ### Configuration Files
 
 #### `.env`
 **Main configuration file** - Used by `fan_control.py` for all fan control settings.
+
+**Location:** Root directory
 
 **Contains:**
 - iDRAC credentials
@@ -718,17 +719,133 @@ These scripts use the `ipmi_config.env` file for configuration (separate from th
 - 7-level fan speed settings
 - Auto mode threshold
 - GPU temperature override settings
-- Log file path
+- Log file paths
 
-#### `ipmi_config.env`
-**Standalone scripts configuration** - Used by the standalone shell scripts (`check_temperatures.sh`, `check_fan_speeds.sh`, `control_fan_speed.sh`, `analyze_temperatures.sh`).
+#### `Scripts/ipmi_config.env`
+**Standalone scripts configuration** - Used by the standalone shell scripts in the `Scripts/` directory.
+
+**Location:** `Scripts/` directory
+
+**Setup:**
+```bash
+cd Scripts
+cp ipmi_config.env.example ipmi_config.env
+nano ipmi_config.env
+```
 
 **Contains:**
 - `SERVER_IP` - iDRAC IP address
 - `IPMI_USERNAME` - iDRAC username
 - `IPMI_PASSWORD` - iDRAC password
 
-**Note:** This is separate from `.env` to allow different configurations if needed.
+**Note:** This is separate from `.env` to allow different configurations if needed. The standalone scripts are independent utilities that can be used without the main fan control system.
+
+---
+
+## 🧠 Adaptive Learning System
+
+The fan control system includes an adaptive learning feature that analyzes historical temperature and fan speed data to optimize thresholds automatically.
+
+### How It Works
+
+1. **Data Collection**: The `fan_control.py` script automatically logs unified data (temperatures + fan speeds) to `fan_control_data.log` on each run
+2. **Analysis**: The `learn_thresholds.py` script analyzes this data to identify patterns
+3. **Suggestions**: The learning script suggests threshold adjustments based on:
+   - Temperature stability at different fan speeds
+   - Fan efficiency analysis
+   - Temperature trends over time
+
+### Using the Learning System
+
+#### Run Learning Analysis
+
+```bash
+python3 learn_thresholds.py
+```
+
+**What it does:**
+- Analyzes last 7 days of data (configurable)
+- Identifies optimal temperature thresholds for each fan speed level
+- Detects if fans are running too high or too low
+- Suggests threshold adjustments with confidence levels
+
+**Output includes:**
+- Data analysis summary (total points, date range, temperature statistics)
+- Fan speed efficiency analysis (average temps at each fan speed %)
+- Temperature trend analysis (detects rising/falling trends)
+- Suggested threshold adjustments with reasons
+
+#### Example Output
+
+```
+======================================================================
+Fan Control Threshold Learning Report
+======================================================================
+
+Data Analysis:
+  Total data points: 1250
+  Date range: 2026-01-15 10:00:00 to 2026-01-21 23:30:00
+  Average max temperature: 36.2°C
+  Temperature range: 28.0°C - 45.0°C
+
+Fan Speed Efficiency Analysis:
+   10%: Avg temp 33.5°C (±1.2°C), Avg RPM 3320, Samples: 450
+   15%: Avg temp 38.2°C (±1.8°C), Avg RPM 4200, Samples: 320
+   ...
+
+Suggested Threshold Adjustments:
+  ✓ SYSTEM_TEMP_LOW: 40°C → 38°C
+     Reason: Fan speed 15% maintains stable temp at 36.2°C (±1.8°C)
+```
+
+### Configuration
+
+The learning system uses the following settings (in `.env`):
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `DATA_LOG_FILE` | Path to unified data log file | `fan_control_data.log` |
+
+### Data Log Format
+
+The unified data log (`fan_control_data.log`) contains:
+- Timestamp
+- Max GPU temperature
+- Max system temperature
+- Average fan RPM
+- Fan speed percentage
+- All GPU temperatures (CSV)
+- All system temperatures (CSV)
+- All fan speeds (CSV)
+
+Format: `timestamp|max_gpu|max_system|avg_fan_rpm|fan_speed_pct|gpu_temps_csv|system_temps_csv|fan_speeds_csv`
+
+### Learning Algorithm
+
+The learning system:
+
+1. **Requires minimum data**: Needs at least 100 data points for reliable analysis
+2. **Analyzes efficiency**: Groups data by fan speed percentage and calculates:
+   - Average temperature maintained
+   - Temperature stability (standard deviation)
+   - Sample count for confidence
+3. **Detects trends**: Identifies if temperatures are rising (fans too low) or falling (fans too high)
+4. **Suggests adjustments**: Only suggests changes if:
+   - Temperature is stable at a fan speed (low std dev)
+   - Suggested change is >2°C different from current
+   - Sufficient sample data exists (confidence level)
+
+### Best Practices
+
+1. **Let it collect data**: Run `fan_control.py` normally for at least a few days to collect sufficient data
+2. **Review suggestions**: Always review learning suggestions before applying
+3. **Monitor after changes**: After applying suggested thresholds, monitor temperatures closely
+4. **Run periodically**: Run `learn_thresholds.py` weekly or monthly to optimize thresholds
+5. **Consider environment**: Learning suggestions are based on your specific environment - adjust if needed
+
+### Automatic Threshold Updates (Future)
+
+Future versions may include automatic threshold updates based on learning analysis. For now, review suggestions and update `.env` manually.
 
 ---
 

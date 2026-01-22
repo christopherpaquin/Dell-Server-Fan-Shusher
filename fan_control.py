@@ -76,6 +76,9 @@ GPU_TEMP_OVERRIDE = os.getenv('GPU_TEMP_OVERRIDE', 'true').lower() in ('true', '
 # Log file path
 LOG_FILE = os.getenv('LOG_FILE', '/var/log/dell-r730-fan-control.log')
 
+# Unified data log file for learning (temperatures + fan speeds together)
+DATA_LOG_FILE = os.getenv('DATA_LOG_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fan_control_data.log'))
+
 # Setup logging (will be reconfigured in main() for read-only modes)
 log_dir = os.path.dirname(LOG_FILE)
 if log_dir and not os.path.exists(log_dir):
@@ -506,6 +509,37 @@ def get_fan_speeds_sensors():
         pass
     
     return speeds
+
+
+def log_unified_data(gpu_temps, system_temps, fan_speeds, fan_speed_pct):
+    """
+    Log unified data (temperatures + fan speeds) for learning/analysis.
+    Format: timestamp|max_gpu_temp|max_system_temp|avg_fan_rpm|fan_speed_pct|gpu_temps_csv|system_temps_csv|fan_speeds_csv
+    """
+    try:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        max_gpu = max(gpu_temps) if gpu_temps else 0
+        max_system = max(system_temps) if system_temps else 0
+        avg_fan_rpm = int(sum(fan_speeds) / len(fan_speeds)) if fan_speeds else 0
+        fan_pct = fan_speed_pct if fan_speed_pct is not None else 0
+        
+        gpu_csv = ','.join(map(str, gpu_temps)) if gpu_temps else ''
+        system_csv = ','.join(map(str, system_temps)) if system_temps else ''
+        fan_csv = ','.join(map(str, fan_speeds)) if fan_speeds else ''
+        
+        log_entry = f"{timestamp}|{max_gpu}|{max_system}|{avg_fan_rpm}|{fan_pct}|{gpu_csv}|{system_csv}|{fan_csv}\n"
+        
+        # Ensure log directory exists
+        log_dir = os.path.dirname(DATA_LOG_FILE)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        
+        # Append to unified data log
+        with open(DATA_LOG_FILE, 'a') as f:
+            f.write(log_entry)
+            
+    except Exception as e:
+        logger.debug(f"Failed to write unified data log: {e}")
 
 
 def get_fan_speeds():
@@ -957,6 +991,9 @@ Examples:
         logger.info(f"ACTION: Switching to AUTOMATIC mode - iDRAC will control fans")
         logger.info(f"Reason: {reason}")
         enable_automatic_fan_mode()
+        # Log data even in auto mode
+        if current_fan_speeds:
+            log_unified_data(gpu_temps, system_temps, current_fan_speeds, None)
     else:
         # Enable manual mode and set fan speed
         if enable_manual_fan_mode():
@@ -985,8 +1022,14 @@ Examples:
                             logger.info(f"Fan speed UNCHANGED: {avg_new_speed} RPM")
                     else:
                         logger.info(f"Fan speeds after change: {', '.join(map(str, new_fan_speeds))} RPM (avg: {avg_new_speed} RPM)")
+                    
+                    # Log unified data for learning (after fan speed change)
+                    log_unified_data(gpu_temps, system_temps, new_fan_speeds, speed)
             else:
                 logger.error("Failed to set fan speed")
+                # Still log data even if fan speed change failed
+                if current_fan_speeds:
+                    log_unified_data(gpu_temps, system_temps, current_fan_speeds, None)
         else:
             logger.error("Failed to enable manual mode")
             sys.exit(1)
