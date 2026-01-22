@@ -31,26 +31,38 @@ IDRAC_IP = os.getenv('IDRAC_IP', '10.1.10.20')
 IDRAC_USER = os.getenv('IDRAC_USER', 'root')
 IDRAC_PASS = os.getenv('IDRAC_PASS', 'calvin')
 
-# Temperature thresholds (in Celsius)
-GPU_TEMP_LOW = int(os.getenv('GPU_TEMP_LOW', '50'))
-GPU_TEMP_MED = int(os.getenv('GPU_TEMP_MED', '60'))
-GPU_TEMP_HIGH = int(os.getenv('GPU_TEMP_HIGH', '70'))
-GPU_TEMP_CRITICAL = int(os.getenv('GPU_TEMP_CRITICAL', '80'))
+# Temperature thresholds (in Celsius) - 7 levels for granular control
+# GPU thresholds
+GPU_TEMP_VERY_LOW = int(os.getenv('GPU_TEMP_VERY_LOW', '35'))
+GPU_TEMP_LOW = int(os.getenv('GPU_TEMP_LOW', '45'))
+GPU_TEMP_MED_LOW = int(os.getenv('GPU_TEMP_MED_LOW', '55'))
+GPU_TEMP_MED = int(os.getenv('GPU_TEMP_MED', '65'))
+GPU_TEMP_MED_HIGH = int(os.getenv('GPU_TEMP_MED_HIGH', '75'))
+GPU_TEMP_HIGH = int(os.getenv('GPU_TEMP_HIGH', '85'))
+GPU_TEMP_VERY_HIGH = int(os.getenv('GPU_TEMP_VERY_HIGH', '95'))
 
-SYSTEM_TEMP_LOW = int(os.getenv('SYSTEM_TEMP_LOW', '40'))
-SYSTEM_TEMP_MED = int(os.getenv('SYSTEM_TEMP_MED', '50'))
-SYSTEM_TEMP_HIGH = int(os.getenv('SYSTEM_TEMP_HIGH', '60'))
-SYSTEM_TEMP_CRITICAL = int(os.getenv('SYSTEM_TEMP_CRITICAL', '70'))
+# System thresholds
+SYSTEM_TEMP_VERY_LOW = int(os.getenv('SYSTEM_TEMP_VERY_LOW', '25'))
+SYSTEM_TEMP_LOW = int(os.getenv('SYSTEM_TEMP_LOW', '35'))
+SYSTEM_TEMP_MED_LOW = int(os.getenv('SYSTEM_TEMP_MED_LOW', '45'))
+SYSTEM_TEMP_MED = int(os.getenv('SYSTEM_TEMP_MED', '55'))
+SYSTEM_TEMP_MED_HIGH = int(os.getenv('SYSTEM_TEMP_MED_HIGH', '65'))
+SYSTEM_TEMP_HIGH = int(os.getenv('SYSTEM_TEMP_HIGH', '75'))
+SYSTEM_TEMP_VERY_HIGH = int(os.getenv('SYSTEM_TEMP_VERY_HIGH', '85'))
 
-# Fan speed percentages (0-100%)
-FAN_SPEED_LOW = int(os.getenv('FAN_SPEED_LOW', '20'))
-FAN_SPEED_MED = int(os.getenv('FAN_SPEED_MED', '40'))
-FAN_SPEED_HIGH = int(os.getenv('FAN_SPEED_HIGH', '60'))
-FAN_SPEED_CRITICAL = int(os.getenv('FAN_SPEED_CRITICAL', '80'))
+# Fan speed percentages (0-100%) - 7 levels matching temperature ranges
+FAN_SPEED_VERY_LOW = int(os.getenv('FAN_SPEED_VERY_LOW', '10'))
+FAN_SPEED_LOW = int(os.getenv('FAN_SPEED_LOW', '15'))
+FAN_SPEED_MED_LOW = int(os.getenv('FAN_SPEED_MED_LOW', '25'))
+FAN_SPEED_MED = int(os.getenv('FAN_SPEED_MED', '35'))
+FAN_SPEED_MED_HIGH = int(os.getenv('FAN_SPEED_MED_HIGH', '50'))
+FAN_SPEED_HIGH = int(os.getenv('FAN_SPEED_HIGH', '65'))
+FAN_SPEED_VERY_HIGH = int(os.getenv('FAN_SPEED_VERY_HIGH', '80'))
 
 # Temperature threshold for switching to automatic mode (let iDRAC handle it)
 # If temps exceed this, disable manual mode and let iDRAC take over
-AUTO_MODE_THRESHOLD = int(os.getenv('AUTO_MODE_THRESHOLD', '75'))
+# Default to VERY_HIGH threshold if not specified
+AUTO_MODE_THRESHOLD = int(os.getenv('AUTO_MODE_THRESHOLD', str(max(GPU_TEMP_VERY_HIGH, SYSTEM_TEMP_VERY_HIGH))))
 
 # IPMI timeout and retry settings (for slow ipmitool responses)
 IPMI_TIMEOUT = int(os.getenv('IPMI_TIMEOUT', '20'))  # seconds
@@ -544,6 +556,9 @@ def determine_fan_action(gpu_temps, system_temps):
     - action: 'manual' or 'auto'
     - speed: fan speed percentage (only used if action is 'manual')
     - reason: String explaining why this action was chosen
+    
+    Uses 7 temperature levels: Very-Low, Low, Medium-Low, Medium, Medium-High, High, Very-High
+    Checks from highest to lowest temperature threshold.
     """
     # Get maximum temperatures
     max_gpu_temp = max(gpu_temps) if gpu_temps else 0
@@ -568,54 +583,82 @@ def determine_fan_action(gpu_temps, system_temps):
         reason = f"Temperature exceeds auto mode threshold ({AUTO_MODE_THRESHOLD}°C): GPU={max_gpu_temp}°C, System={max_system_temp}°C"
         return ('auto', None, reason)
     
-    # Determine fan speed based on critical thresholds
-    # Checks from highest to lowest temperature
+    # Determine fan speed based on 7-level thresholds
+    # Checks from highest to lowest temperature (Very-High down to Very-Low)
     if use_gpu_thresholds:
         # Use GPU thresholds when GPU is prioritized
-        if decision_temp >= GPU_TEMP_CRITICAL:
-            reason = f"GPU temperature {decision_temp}°C >= CRITICAL threshold ({GPU_TEMP_CRITICAL}°C) - GPU override active"
-            return ('manual', FAN_SPEED_CRITICAL, reason)
+        if decision_temp >= GPU_TEMP_VERY_HIGH:
+            reason = f"GPU temperature {decision_temp}°C >= VERY-HIGH threshold ({GPU_TEMP_VERY_HIGH}°C) - GPU override active"
+            return ('manual', FAN_SPEED_VERY_HIGH, reason)
         elif decision_temp >= GPU_TEMP_HIGH:
             reason = f"GPU temperature {decision_temp}°C >= HIGH threshold ({GPU_TEMP_HIGH}°C) - GPU override active"
             return ('manual', FAN_SPEED_HIGH, reason)
+        elif decision_temp >= GPU_TEMP_MED_HIGH:
+            reason = f"GPU temperature {decision_temp}°C >= MEDIUM-HIGH threshold ({GPU_TEMP_MED_HIGH}°C) - GPU override active"
+            return ('manual', FAN_SPEED_MED_HIGH, reason)
         elif decision_temp >= GPU_TEMP_MED:
             reason = f"GPU temperature {decision_temp}°C >= MEDIUM threshold ({GPU_TEMP_MED}°C) - GPU override active"
             return ('manual', FAN_SPEED_MED, reason)
+        elif decision_temp >= GPU_TEMP_MED_LOW:
+            reason = f"GPU temperature {decision_temp}°C >= MEDIUM-LOW threshold ({GPU_TEMP_MED_LOW}°C) - GPU override active"
+            return ('manual', FAN_SPEED_MED_LOW, reason)
         elif decision_temp >= GPU_TEMP_LOW:
             reason = f"GPU temperature {decision_temp}°C >= LOW threshold ({GPU_TEMP_LOW}°C) - GPU override active"
             return ('manual', FAN_SPEED_LOW, reason)
+        elif decision_temp >= GPU_TEMP_VERY_LOW:
+            reason = f"GPU temperature {decision_temp}°C >= VERY-LOW threshold ({GPU_TEMP_VERY_LOW}°C) - GPU override active"
+            return ('manual', FAN_SPEED_VERY_LOW, reason)
         else:
-            reason = f"GPU temperature {decision_temp}°C < LOW threshold ({GPU_TEMP_LOW}°C) - GPU override active"
-            return ('manual', FAN_SPEED_LOW, reason)
+            reason = f"GPU temperature {decision_temp}°C < VERY-LOW threshold ({GPU_TEMP_VERY_LOW}°C) - GPU override active"
+            return ('manual', FAN_SPEED_VERY_LOW, reason)
     else:
-        # Use both GPU and system thresholds (original behavior)
-        if max_gpu_temp >= GPU_TEMP_CRITICAL or max_system_temp >= SYSTEM_TEMP_CRITICAL:
-            if max_gpu_temp >= GPU_TEMP_CRITICAL:
-                reason = f"GPU temperature {max_gpu_temp}°C >= CRITICAL threshold ({GPU_TEMP_CRITICAL}°C)"
+        # Use both GPU and system thresholds (check highest of either)
+        # Check from highest to lowest threshold
+        if max_gpu_temp >= GPU_TEMP_VERY_HIGH or max_system_temp >= SYSTEM_TEMP_VERY_HIGH:
+            if max_gpu_temp >= GPU_TEMP_VERY_HIGH:
+                reason = f"GPU temperature {max_gpu_temp}°C >= VERY-HIGH threshold ({GPU_TEMP_VERY_HIGH}°C)"
             else:
-                reason = f"System temperature {max_system_temp}°C >= CRITICAL threshold ({SYSTEM_TEMP_CRITICAL}°C)"
-            return ('manual', FAN_SPEED_CRITICAL, reason)
+                reason = f"System temperature {max_system_temp}°C >= VERY-HIGH threshold ({SYSTEM_TEMP_VERY_HIGH}°C)"
+            return ('manual', FAN_SPEED_VERY_HIGH, reason)
         elif max_gpu_temp >= GPU_TEMP_HIGH or max_system_temp >= SYSTEM_TEMP_HIGH:
             if max_gpu_temp >= GPU_TEMP_HIGH:
                 reason = f"GPU temperature {max_gpu_temp}°C >= HIGH threshold ({GPU_TEMP_HIGH}°C)"
             else:
                 reason = f"System temperature {max_system_temp}°C >= HIGH threshold ({SYSTEM_TEMP_HIGH}°C)"
             return ('manual', FAN_SPEED_HIGH, reason)
+        elif max_gpu_temp >= GPU_TEMP_MED_HIGH or max_system_temp >= SYSTEM_TEMP_MED_HIGH:
+            if max_gpu_temp >= GPU_TEMP_MED_HIGH:
+                reason = f"GPU temperature {max_gpu_temp}°C >= MEDIUM-HIGH threshold ({GPU_TEMP_MED_HIGH}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= MEDIUM-HIGH threshold ({SYSTEM_TEMP_MED_HIGH}°C)"
+            return ('manual', FAN_SPEED_MED_HIGH, reason)
         elif max_gpu_temp >= GPU_TEMP_MED or max_system_temp >= SYSTEM_TEMP_MED:
             if max_gpu_temp >= GPU_TEMP_MED:
                 reason = f"GPU temperature {max_gpu_temp}°C >= MEDIUM threshold ({GPU_TEMP_MED}°C)"
             else:
                 reason = f"System temperature {max_system_temp}°C >= MEDIUM threshold ({SYSTEM_TEMP_MED}°C)"
             return ('manual', FAN_SPEED_MED, reason)
+        elif max_gpu_temp >= GPU_TEMP_MED_LOW or max_system_temp >= SYSTEM_TEMP_MED_LOW:
+            if max_gpu_temp >= GPU_TEMP_MED_LOW:
+                reason = f"GPU temperature {max_gpu_temp}°C >= MEDIUM-LOW threshold ({GPU_TEMP_MED_LOW}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= MEDIUM-LOW threshold ({SYSTEM_TEMP_MED_LOW}°C)"
+            return ('manual', FAN_SPEED_MED_LOW, reason)
         elif max_gpu_temp >= GPU_TEMP_LOW or max_system_temp >= SYSTEM_TEMP_LOW:
             if max_gpu_temp >= GPU_TEMP_LOW:
                 reason = f"GPU temperature {max_gpu_temp}°C >= LOW threshold ({GPU_TEMP_LOW}°C)"
             else:
                 reason = f"System temperature {max_system_temp}°C >= LOW threshold ({SYSTEM_TEMP_LOW}°C)"
-            return ('manual', FAN_SPEED_LOW, reason)  # Use LOW speed between LOW and MED thresholds
+            return ('manual', FAN_SPEED_LOW, reason)
+        elif max_gpu_temp >= GPU_TEMP_VERY_LOW or max_system_temp >= SYSTEM_TEMP_VERY_LOW:
+            if max_gpu_temp >= GPU_TEMP_VERY_LOW:
+                reason = f"GPU temperature {max_gpu_temp}°C >= VERY-LOW threshold ({GPU_TEMP_VERY_LOW}°C)"
+            else:
+                reason = f"System temperature {max_system_temp}°C >= VERY-LOW threshold ({SYSTEM_TEMP_VERY_LOW}°C)"
+            return ('manual', FAN_SPEED_VERY_LOW, reason)
         else:
             reason = f"Temperatures below all thresholds (GPU: {max_gpu_temp}°C, System: {max_system_temp}°C)"
-            return ('manual', FAN_SPEED_LOW, reason)
+            return ('manual', FAN_SPEED_VERY_LOW, reason)
 
 
 def check_temperatures():
@@ -659,11 +702,14 @@ def check_temperatures():
     )
     print(f"Current Max Temperature: {max_temp}°C")
     print()
-    print("Temperature Thresholds:")
-    print(f"  Low: {GPU_TEMP_LOW}°C / {SYSTEM_TEMP_LOW}°C (GPU/System)")
+    print("Temperature Thresholds (7 levels):")
+    print(f"  Very-Low: {GPU_TEMP_VERY_LOW}°C / {SYSTEM_TEMP_VERY_LOW}°C (GPU/System)")
+    print(f"  Low: {GPU_TEMP_LOW}°C / {SYSTEM_TEMP_LOW}°C")
+    print(f"  Medium-Low: {GPU_TEMP_MED_LOW}°C / {SYSTEM_TEMP_MED_LOW}°C")
     print(f"  Medium: {GPU_TEMP_MED}°C / {SYSTEM_TEMP_MED}°C")
+    print(f"  Medium-High: {GPU_TEMP_MED_HIGH}°C / {SYSTEM_TEMP_MED_HIGH}°C")
     print(f"  High: {GPU_TEMP_HIGH}°C / {SYSTEM_TEMP_HIGH}°C")
-    print(f"  Critical: {GPU_TEMP_CRITICAL}°C / {SYSTEM_TEMP_CRITICAL}°C")
+    print(f"  Very-High: {GPU_TEMP_VERY_HIGH}°C / {SYSTEM_TEMP_VERY_HIGH}°C")
     print(f"  Auto Mode Threshold: {AUTO_MODE_THRESHOLD}°C")
     print("=" * 60)
 
@@ -690,11 +736,14 @@ def check_fan_speeds():
         print("Fan Speeds: Unable to read")
     
     print()
-    print("Configured Fan Speed Settings:")
+    print("Configured Fan Speed Settings (7 levels):")
+    print(f"  Very-Low: {FAN_SPEED_VERY_LOW}%")
     print(f"  Low: {FAN_SPEED_LOW}%")
+    print(f"  Medium-Low: {FAN_SPEED_MED_LOW}%")
     print(f"  Medium: {FAN_SPEED_MED}%")
+    print(f"  Medium-High: {FAN_SPEED_MED_HIGH}%")
     print(f"  High: {FAN_SPEED_HIGH}%")
-    print(f"  Critical: {FAN_SPEED_CRITICAL}%")
+    print(f"  Very-High: {FAN_SPEED_VERY_HIGH}%")
     print("=" * 60)
 
 
