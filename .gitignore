@@ -1,5 +1,6 @@
 # Environment file with credentials
 .env
+ipmi_config.env
 fan_speed_log.txt
 temperature_log.txt
 fan_control_data.log
