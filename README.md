@@ -2,7 +2,7 @@
 
 # 🖥️ Dell Server Fan Shusher
 
-**Intelligent fan speed control for Dell R730 servers with multi-vendor GPU temperature monitoring**
+**Intelligent fan speed control for Dell R720/R730 servers with multi-vendor GPU temperature monitoring**
 
 <img src="https://static.wikia.nocookie.net/universalstudios/images/1/1e/Captain_smek132.png/revision/latest?cb=20201014154632" alt="Dell Server Fan Shusher" width="25%">
 
@@ -41,13 +41,13 @@
 
 ## 🎯 Overview
 
-A Python script that intelligently controls fan speeds on a Dell R730 server based on GPU and system temperatures. The script monitors GPU temperatures from **NVIDIA**, **AMD**, and **Intel** GPUs, and system temperatures via `ipmitool`, then adjusts fan speeds to keep noise low while maintaining safe operating temperatures.
+A Python script that intelligently controls fan speeds on Dell R720/R730 servers based on GPU and system temperatures. The script monitors GPU temperatures from **NVIDIA**, **AMD**, and **Intel** GPUs, and system temperatures via `ipmitool`, then adjusts fan speeds to keep noise low while maintaining safe operating temperatures.
 
 **Designed to run periodically via cron or systemd service.**
 
 ### 🏷️ Tags
 
-`dell-r730` `fan-control` `gpu-monitoring` `temperature-control` `ipmi` `idrac` `nvidia` `amd` `intel` `systemd` `cron` `python` `server-management` `thermal-management`
+`dell-r720` `dell-r730` `fan-control` `gpu-monitoring` `temperature-control` `ipmi` `idrac` `nvidia` `amd` `intel` `systemd` `cron` `python` `server-management` `thermal-management`
 
 ---
 

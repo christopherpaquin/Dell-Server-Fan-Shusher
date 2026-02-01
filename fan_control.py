@@ -180,7 +180,7 @@ def set_fan_speed(percentage):
     """Set global fan speed to specified percentage (0-100)."""
     # Clamp percentage to valid range
     percentage = max(0, min(100, percentage))
-    hex_value = format(percentage, '02x')
+    hex_value = f'0x{percentage:02x}'
     
     success, stdout, stderr = run_ipmi_command(['raw', '0x30', '0x30', '0x02', '0xff', hex_value])
     if success:
