@@ -185,7 +185,7 @@ The system uses **7 temperature levels** for granular fan control, perfect for c
 | **Other Settings** |
 | `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode (°C) | Auto (max of Very-High thresholds) |
 | `GPU_TEMP_OVERRIDE` | Prioritize GPU temps over system temps | `true` |
-| `LOG_FILE` | Log file path | `/var/log/dell-r730-fan-control.log` |
+| `LOG_FILE` | Log file path | `/var/log/dell-r730-fan-control.log` (falls back to `logs/fan_control.log`) |
 
 ### Example Configuration
 
@@ -346,10 +346,14 @@ python3 fan_control.py --help
    crontab -e
    ```
 
-2. **Add entry** (see `cron.example` for more options):
+2. **Add entry**:
    ```bash
    # Run every 5 minutes
    */5 * * * * /usr/bin/python3 /path/to/fan_control.py
+   
+   # Or run every 30 seconds (requires two entries)
+   * * * * * /usr/bin/python3 /path/to/fan_control.py
+   * * * * * sleep 30; /usr/bin/python3 /path/to/fan_control.py
    ```
 
    **For 30-second intervals** (requires two entries):
@@ -454,7 +458,7 @@ The script automatically detects and supports multiple GPU vendors:
 
 ## 📝 Logging
 
-All operations are logged to the file specified in `LOG_FILE` (default: `/var/log/dell-r730-fan-control.log`).
+All operations are logged to the file specified in `LOG_FILE` (default: `/var/log/dell-r730-fan-control.log`). If `/var/log` is not writable, it falls back to `logs/fan_control.log` in the script directory.
 
 ### Log Contents
 
@@ -639,7 +643,7 @@ cd Scripts
 - Connects to iDRAC via IPMI
 - Queries all temperature sensors
 - Displays temperatures in both Celsius and Fahrenheit
-- Appends data to `temperature_log.txt` for historical tracking
+- Appends data to `logs/temperature_log.txt` for historical tracking
 - **Read-only** - does not modify any settings
 
 #### `Scripts/check_fan_speeds.sh`
@@ -656,7 +660,7 @@ cd Scripts
 - Queries all fan speed sensors
 - Displays fan speeds in a formatted table with columns: Fan Name, RPM, and Speed %
 - Shows summary statistics (total fans, average, min, max) with percentages
-- Appends data to `fan_speed_log.txt` for historical tracking
+- Appends data to `logs/fan_speed_log.txt` for historical tracking
 - **Read-only** - does not modify any settings
 
 #### `Scripts/control_fan_speed.sh`
@@ -748,7 +752,7 @@ The fan control system includes an adaptive learning feature that analyzes histo
 
 ### How It Works
 
-1. **Data Collection**: The `fan_control.py` script automatically logs unified data (temperatures + fan speeds) to `fan_control_data.log` on each run
+1. **Data Collection**: The `fan_control.py` script automatically logs unified data (temperatures + fan speeds) to `logs/fan_control_data.log` on each run
 2. **Analysis**: The `learn_thresholds.py` script analyzes this data to identify patterns
 3. **Suggestions**: The learning script suggests threshold adjustments based on:
    - Temperature stability at different fan speeds
@@ -757,10 +761,33 @@ The fan control system includes an adaptive learning feature that analyzes histo
 
 ### Using the Learning System
 
-#### Run Learning Analysis
+#### Automatic Execution (Recommended)
+
+The learning system is **automatically installed** when you run `install.sh` with systemd. It runs **weekly** to analyze data and optimize thresholds.
+
+**Automatic Features:**
+- Runs every week via systemd timer
+- Automatically applies safe threshold updates (if enabled)
+- Creates backup of `.env` before making changes
+- Logs all actions to systemd journal
+
+**To enable automatic threshold updates:**
+1. Set `AUTO_APPLY_LEARNING=true` in your `.env` file
+2. The learning service will automatically apply safe suggestions weekly
+3. Review logs with: `sudo journalctl -u dell-r730-fan-control-learning.service -f`
+
+#### Manual Execution
+
+You can also run the learning analysis manually:
 
 ```bash
 python3 learn_thresholds.py
+```
+
+Or with auto-apply enabled:
+
+```bash
+python3 learn_thresholds.py --auto-apply
 ```
 
 **What it does:**
@@ -768,12 +795,14 @@ python3 learn_thresholds.py
 - Identifies optimal temperature thresholds for each fan speed level
 - Detects if fans are running too high or too low
 - Suggests threshold adjustments with confidence levels
+- Optionally applies safe suggestions automatically
 
 **Output includes:**
 - Data analysis summary (total points, date range, temperature statistics)
 - Fan speed efficiency analysis (average temps at each fan speed %)
 - Temperature trend analysis (detects rising/falling trends)
 - Suggested threshold adjustments with reasons
+- Safety indicators for each suggestion
 
 #### Example Output
 
@@ -804,11 +833,21 @@ The learning system uses the following settings (in `.env`):
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `DATA_LOG_FILE` | Path to unified data log file | `fan_control_data.log` |
+| `DATA_LOG_FILE` | Path to unified data log file | `logs/fan_control_data.log` |
+| `AUTO_APPLY_LEARNING` | Automatically apply safe threshold updates | `false` |
+
+**AUTO_APPLY_LEARNING Safety Features:**
+- Only applies **high-confidence** suggestions
+- Maximum change per threshold: **5°C** (prevents drastic changes)
+- Minimum change required: **2°C** (ignores minor adjustments)
+- Creates automatic backup of `.env` before changes
+- Only applies if temperature is stable at the fan speed level
+
+**Recommended:** Enable `AUTO_APPLY_LEARNING=true` to automatically adapt to seasonal temperature changes (summer/winter).
 
 ### Data Log Format
 
-The unified data log (`fan_control_data.log`) contains:
+The unified data log (`logs/fan_control_data.log`) contains:
 - Timestamp
 - Max GPU temperature
 - Max system temperature
@@ -835,17 +874,50 @@ The learning system:
    - Suggested change is >2°C different from current
    - Sufficient sample data exists (confidence level)
 
+### Automatic Threshold Updates
+
+The learning system can **automatically update thresholds** when enabled:
+
+**How it works:**
+1. Learning service runs weekly (installed automatically with systemd)
+2. Analyzes historical temperature and fan speed data
+3. Identifies safe threshold adjustments based on:
+   - High confidence (50+ samples)
+   - Stable temperatures (low standard deviation)
+   - Reasonable change size (2-5°C)
+4. Automatically updates `.env` file (if `AUTO_APPLY_LEARNING=true`)
+5. Creates backup before changes (`.env.backup.YYYYMMDD_HHMMSS`)
+
+**Safety Checks:**
+- ✅ Only high-confidence suggestions are auto-applied
+- ✅ Maximum 5°C change per threshold (prevents drastic changes)
+- ✅ Automatic backup created before any changes
+- ✅ Logs all actions to systemd journal
+
+**Managing Automatic Learning:**
+
+```bash
+# Check learning timer status
+sudo systemctl status dell-r730-fan-control-learning.timer
+
+# View learning logs
+sudo journalctl -u dell-r730-fan-control-learning.service -f
+
+# Run learning manually
+sudo systemctl start dell-r730-fan-control-learning.service
+
+# Disable automatic learning
+sudo systemctl stop dell-r730-fan-control-learning.timer
+sudo systemctl disable dell-r730-fan-control-learning.timer
+```
+
 ### Best Practices
 
-1. **Let it collect data**: Run `fan_control.py` normally for at least a few days to collect sufficient data
-2. **Review suggestions**: Always review learning suggestions before applying
-3. **Monitor after changes**: After applying suggested thresholds, monitor temperatures closely
-4. **Run periodically**: Run `learn_thresholds.py` weekly or monthly to optimize thresholds
+1. **Let it collect data**: Run `fan_control.py` normally for at least a few days to collect sufficient data (100+ points)
+2. **Enable auto-apply for seasonal changes**: Set `AUTO_APPLY_LEARNING=true` to automatically adapt to summer/winter temperature changes
+3. **Monitor after changes**: Check logs after automatic updates to ensure thresholds are working well
+4. **Review large changes manually**: If suggestions require >5°C changes, review manually before applying
 5. **Consider environment**: Learning suggestions are based on your specific environment - adjust if needed
-
-### Automatic Threshold Updates (Future)
-
-Future versions may include automatic threshold updates based on learning analysis. For now, review suggestions and update `.env` manually.
 
 ---
 

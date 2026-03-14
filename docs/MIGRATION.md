@@ -32,9 +32,13 @@ fi
 
 ### 4. Move Log Files (if they exist)
 ```bash
-# Move log files to Scripts directory if they exist
-[ -f temperature_log.txt ] && mv temperature_log.txt Scripts/
-[ -f fan_speed_log.txt ] && mv fan_speed_log.txt Scripts/
+# Create logs directory and move log files there
+mkdir -p logs
+[ -f temperature_log.txt ] && mv temperature_log.txt logs/
+[ -f fan_speed_log.txt ] && mv fan_speed_log.txt logs/
+[ -f fan_control_data.log ] && mv fan_control_data.log logs/
+[ -f Scripts/temperature_log.txt ] && mv Scripts/temperature_log.txt logs/
+[ -f Scripts/fan_speed_log.txt ] && mv Scripts/fan_speed_log.txt logs/
 ```
 
 ### 5. Update Script References (if needed)
@@ -73,5 +77,5 @@ You should see:
 
 - The scripts use relative paths, so they will work from the Scripts directory
 - The `ipmi_config.env` file should be in the Scripts directory
-- Log files (`temperature_log.txt`, `fan_speed_log.txt`) will be created in the Scripts directory
+- Log files (`temperature_log.txt`, `fan_speed_log.txt`, `fan_control_data.log`) are now stored in the `logs/` directory at the repo root
 - All scripts are executable and ready to use

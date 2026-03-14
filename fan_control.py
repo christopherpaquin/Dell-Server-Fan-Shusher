@@ -77,7 +77,9 @@ GPU_TEMP_OVERRIDE = os.getenv('GPU_TEMP_OVERRIDE', 'true').lower() in ('true', '
 LOG_FILE = os.getenv('LOG_FILE', '/var/log/dell-r730-fan-control.log')
 
 # Unified data log file for learning (temperatures + fan speeds together)
-DATA_LOG_FILE = os.getenv('DATA_LOG_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fan_control_data.log'))
+# Default to logs/ directory in script directory
+default_data_log = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs', 'fan_control_data.log')
+DATA_LOG_FILE = os.getenv('DATA_LOG_FILE', default_data_log)
 
 # Setup logging (will be reconfigured in main() for read-only modes)
 log_dir = os.path.dirname(LOG_FILE)
@@ -85,8 +87,10 @@ if log_dir and not os.path.exists(log_dir):
     try:
         os.makedirs(log_dir, exist_ok=True)
     except PermissionError:
-        # Fallback to current directory if can't write to /var/log
-        LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fan_control.log')
+        # Fallback to logs/ directory in script directory if can't write to /var/log
+        logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
+        LOG_FILE = os.path.join(logs_dir, 'fan_control.log')
 
 def setup_logging(read_only=False):
     """Setup logging configuration."""
@@ -137,6 +141,10 @@ def run_ipmi_command(cmd_args, retries=None, timeout=None):
             elif attempt < retries:
                 logger.debug(f"IPMI command failed (attempt {attempt + 1}/{retries + 1}), retrying...")
                 time.sleep(1)  # Brief delay before retry
+            else:
+                # Last attempt failed - preserve actual ipmitool error
+                err_msg = result.stderr.strip() if result.stderr else result.stdout.strip() or f"Exit code {result.returncode}"
+                return False, result.stdout, err_msg or 'Command failed after all retries'
         except subprocess.TimeoutExpired:
             if attempt < retries:
                 logger.debug(f"IPMI command timed out (attempt {attempt + 1}/{retries + 1}), retrying...")
@@ -180,9 +188,10 @@ def set_fan_speed(percentage):
     """Set global fan speed to specified percentage (0-100)."""
     # Clamp percentage to valid range
     percentage = max(0, min(100, percentage))
-    hex_value = f'0x{percentage:02x}'
+    # Dell iDRAC expects decimal format, not hex (hex "0a" returns "Given data invalid")
+    value_str = str(percentage)
     
-    success, stdout, stderr = run_ipmi_command(['raw', '0x30', '0x30', '0x02', '0xff', hex_value])
+    success, stdout, stderr = run_ipmi_command(['raw', '0x30', '0x30', '0x02', '0xff', value_str])
     if success:
         logger.debug(f"IPMI command successful: Fan speed set to {percentage}%")
         return True

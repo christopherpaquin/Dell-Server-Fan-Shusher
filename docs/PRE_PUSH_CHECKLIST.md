@@ -25,7 +25,6 @@
 - ✅ `PRE_PUSH_CHECKLIST.md` - This file
 
 ### Examples
-- ✅ `cron.example` - Example cron entries
 
 ## ⚠️ Files to EXCLUDE (in .gitignore)
 

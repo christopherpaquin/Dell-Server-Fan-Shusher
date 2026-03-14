@@ -18,6 +18,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPT_NAME="fan_control.py"
 SERVICE_FILE="dell-r730-fan-control.service"
 TIMER_FILE="dell-r730-fan-control.timer"
+LEARN_SERVICE_FILE="dell-r730-fan-control-learning.service"
+LEARN_TIMER_FILE="dell-r730-fan-control-learning.timer"
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then 
@@ -60,7 +62,39 @@ if [ -f "/etc/systemd/system/$SERVICE_FILE" ] || [ -f "/etc/systemd/system/$TIME
     echo "Service files removed."
 fi
 
-if [ "$SYSTEMD_FOUND" = false ]; then
+# Check for and remove learning service/timer
+LEARN_SYSTEMD_FOUND=false
+
+# Check if learning timer is active
+if $SUDO systemctl list-units --type=timer --all 2>/dev/null | grep -q "$LEARN_TIMER_FILE"; then
+    LEARN_SYSTEMD_FOUND=true
+    echo -e "${GREEN}Found learning timer. Stopping and disabling...${NC}"
+    $SUDO systemctl stop "$LEARN_TIMER_FILE" 2>/dev/null || echo -e "${YELLOW}Learning timer was not running.${NC}"
+    $SUDO systemctl disable "$LEARN_TIMER_FILE" 2>/dev/null || echo -e "${YELLOW}Learning timer was not enabled.${NC}"
+    echo "Learning timer stopped and disabled."
+fi
+
+# Check if learning service file exists
+if [ -f "/etc/systemd/system/$LEARN_SERVICE_FILE" ] || [ -f "/etc/systemd/system/$LEARN_TIMER_FILE" ]; then
+    LEARN_SYSTEMD_FOUND=true
+    echo -e "${GREEN}Removing learning service files...${NC}"
+    $SUDO rm -f "/etc/systemd/system/$LEARN_SERVICE_FILE" 2>/dev/null || true
+    $SUDO rm -f "/etc/systemd/system/$LEARN_TIMER_FILE" 2>/dev/null || true
+    
+    # Reload systemd daemon
+    if $SUDO systemctl daemon-reload 2>/dev/null; then
+        echo "Systemd daemon reloaded."
+    else
+        echo -e "${YELLOW}Warning: Failed to reload systemd daemon.${NC}"
+    fi
+    echo "Learning service files removed."
+fi
+
+if [ "$LEARN_SYSTEMD_FOUND" = false ]; then
+    echo -e "${GREEN}No learning service/timer found.${NC}"
+fi
+
+if [ "$SYSTEMD_FOUND" = false ] && [ "$LEARN_SYSTEMD_FOUND" = false ]; then
     echo -e "${GREEN}No systemd service/timer found.${NC}"
 fi
 

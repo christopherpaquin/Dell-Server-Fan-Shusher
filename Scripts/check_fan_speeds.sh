@@ -33,8 +33,11 @@ if ! command -v ipmitool &> /dev/null; then
     exit 1
 fi
 
-# Set log file path
-LOG_FILE="${SCRIPT_DIR}/fan_speed_log.txt"
+# Set log file path (logs directory at repo root)
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LOGS_DIR="${REPO_ROOT}/logs"
+mkdir -p "$LOGS_DIR"
+LOG_FILE="${LOGS_DIR}/fan_speed_log.txt"
 
 # Query fan-related sensors
 echo "Querying fan speeds..."

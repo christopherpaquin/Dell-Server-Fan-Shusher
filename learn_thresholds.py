@@ -8,6 +8,8 @@ import os
 import sys
 import csv
 import statistics
+import argparse
+import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -16,11 +18,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-DATA_LOG_FILE = os.getenv('DATA_LOG_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fan_control_data.log'))
+# Default to logs/ directory in script directory
+default_data_log = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs', 'fan_control_data.log')
+DATA_LOG_FILE = os.getenv('DATA_LOG_FILE', default_data_log)
 MIN_DATA_POINTS = 100  # Minimum data points required for learning
 ANALYSIS_DAYS = 7  # Analyze last N days of data
 TEMP_STABILITY_THRESHOLD = 2  # Temperature variation considered "stable" (°C)
 FAN_EFFICIENCY_THRESHOLD = 5  # RPM change considered significant
+AUTO_APPLY_ENABLED = os.getenv('AUTO_APPLY_LEARNING', 'false').lower() == 'true'
+MAX_THRESHOLD_CHANGE = 5  # Maximum change per threshold in one update (°C)
 
 # Target temperature ranges for optimization
 TARGET_TEMP_RANGES = {
@@ -244,7 +250,83 @@ def load_current_thresholds():
     return thresholds
 
 
-def generate_report(data, suggestions, trends):
+def apply_threshold_updates(suggestions, auto_apply=False):
+    """Apply threshold updates to .env file."""
+    if not suggestions:
+        return False, "No suggestions to apply"
+    
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if not os.path.exists(env_file):
+        return False, f".env file not found: {env_file}"
+    
+    # Filter suggestions based on safety criteria
+    safe_suggestions = []
+    for sug in suggestions:
+        change = abs(sug['suggested'] - sug['current'])
+        # Only apply if:
+        # 1. High confidence
+        # 2. Change is reasonable (not too drastic)
+        # 3. Change is significant enough (>2°C)
+        if (sug['confidence'] == 'high' and 
+            change <= MAX_THRESHOLD_CHANGE and 
+            change > 2):
+            safe_suggestions.append(sug)
+    
+    if not safe_suggestions:
+        return False, "No safe suggestions to apply (all require manual review)"
+    
+    # Create backup
+    backup_file = f"{env_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    try:
+        shutil.copy2(env_file, backup_file)
+    except Exception as e:
+        return False, f"Failed to create backup: {e}"
+    
+    # Read current .env file
+    try:
+        with open(env_file, 'r') as f:
+            lines = f.readlines()
+    except Exception as e:
+        return False, f"Failed to read .env file: {e}"
+    
+    # Update thresholds
+    updated_count = 0
+    new_lines = []
+    for line in lines:
+        updated = False
+        for sug in safe_suggestions:
+            # Match threshold name (case-insensitive)
+            threshold_key = sug['threshold']
+            if line.strip().startswith(threshold_key + '=') or line.strip().startswith(threshold_key.upper() + '='):
+                # Preserve comments and formatting
+                if '#' in line:
+                    comment = line[line.index('#'):]
+                    new_lines.append(f"{threshold_key}={sug['suggested']}  {comment}")
+                else:
+                    new_lines.append(f"{threshold_key}={sug['suggested']}\n")
+                updated = True
+                updated_count += 1
+                break
+        
+        if not updated:
+            new_lines.append(line)
+    
+    # Write updated .env file
+    try:
+        with open(env_file, 'w') as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        # Restore backup on failure
+        try:
+            shutil.copy2(backup_file, env_file)
+        except:
+            pass
+        return False, f"Failed to write .env file: {e}"
+    
+    return True, f"Applied {updated_count} threshold updates. Backup saved to {backup_file}"
+
+
+def generate_report(data, suggestions, trends, auto_apply=False, apply_result=None):
     """Generate a learning report."""
     print("=" * 70)
     print("Fan Control Threshold Learning Report")
@@ -284,12 +366,40 @@ def generate_report(data, suggestions, trends):
     # Suggestions
     if suggestions:
         print("Suggested Threshold Adjustments:")
+        safe_suggestions = []
         for sug in suggestions:
+            change = abs(sug['suggested'] - sug['current'])
             confidence_icon = "✓" if sug['confidence'] == 'high' else "~"
-            print(f"  {confidence_icon} {sug['threshold']}: {sug['current']}°C → {sug['suggested']}°C")
+            safety_note = ""
+            
+            # Mark safe suggestions
+            if (sug['confidence'] == 'high' and 
+                change <= MAX_THRESHOLD_CHANGE and 
+                change > 2):
+                safety_note = " [SAFE TO AUTO-APPLY]"
+                safe_suggestions.append(sug)
+            elif change > MAX_THRESHOLD_CHANGE:
+                safety_note = " [REQUIRES MANUAL REVIEW - Change too large]"
+            elif sug['confidence'] != 'high':
+                safety_note = " [REQUIRES MANUAL REVIEW - Low confidence]"
+            
+            print(f"  {confidence_icon} {sug['threshold']}: {sug['current']}°C → {sug['suggested']}°C{safety_note}")
             print(f"     Reason: {sug['reason']}")
+        
         print()
-        print("To apply suggestions, update your .env file with the new values.")
+        
+        # Auto-apply result
+        if auto_apply:
+            if apply_result[0]:
+                print(f"✓ AUTO-APPLIED: {apply_result[1]}")
+            else:
+                print(f"✗ AUTO-APPLY FAILED: {apply_result[1]}")
+            print()
+        else:
+            if safe_suggestions:
+                print(f"Note: {len(safe_suggestions)} suggestion(s) are safe to auto-apply.")
+                print("      Enable AUTO_APPLY_LEARNING=true in .env to apply automatically.")
+            print("To apply suggestions manually, update your .env file with the new values.")
     else:
         print("No threshold adjustments suggested at this time.")
         print("Current thresholds appear to be working well.")
@@ -299,7 +409,17 @@ def generate_report(data, suggestions, trends):
 
 def main():
     """Main function."""
+    parser = argparse.ArgumentParser(description='Analyze fan control data and optimize thresholds')
+    parser.add_argument('--auto-apply', action='store_true',
+                        help='Automatically apply safe threshold updates to .env file')
+    args = parser.parse_args()
+    
+    # Determine if auto-apply should be enabled
+    auto_apply = args.auto_apply or AUTO_APPLY_ENABLED
+    
     print("Analyzing fan control data for threshold optimization...")
+    if auto_apply:
+        print("Auto-apply mode: ENABLED (safe suggestions will be applied automatically)")
     print()
     
     # Load current thresholds
@@ -315,10 +435,19 @@ def main():
     suggestions, analysis_msg = suggest_threshold_adjustments(data, current_thresholds)
     trends = analyze_temperature_trends(data)
     
+    # Apply updates if requested
+    apply_result = None
+    if auto_apply and suggestions:
+        apply_result = apply_threshold_updates(suggestions, auto_apply=True)
+    
     # Generate report
-    generate_report(data, suggestions, trends)
+    generate_report(data, suggestions, trends, auto_apply=auto_apply, apply_result=apply_result)
     
     print(f"\nAnalysis: {analysis_msg}")
+    
+    # Exit with appropriate code
+    if auto_apply and apply_result and not apply_result[0]:
+        sys.exit(1)
 
 
 if __name__ == '__main__':

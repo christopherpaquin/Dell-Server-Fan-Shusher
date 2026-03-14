@@ -26,8 +26,11 @@ echo "Temperature Check - Server: $SERVER_IP"
 echo "=========================================="
 echo ""
 
-# Set log file path
-LOG_FILE="${SCRIPT_DIR}/temperature_log.txt"
+# Set log file path (logs directory at repo root)
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LOGS_DIR="${REPO_ROOT}/logs"
+mkdir -p "$LOGS_DIR"
+LOG_FILE="${LOGS_DIR}/temperature_log.txt"
 
 # Get timestamp
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')

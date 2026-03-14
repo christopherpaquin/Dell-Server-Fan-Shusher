@@ -37,7 +37,7 @@ All scripts in this directory use `ipmi_config.env` for configuration (separate 
 - Connects to iDRAC via IPMI
 - Queries all temperature sensors
 - Displays temperatures in both Celsius and Fahrenheit
-- Appends data to `temperature_log.txt` for historical tracking
+- Appends data to `logs/temperature_log.txt` for historical tracking
 - **Read-only** - does not modify any settings
 
 ### `check_fan_speeds.sh`
@@ -53,7 +53,7 @@ All scripts in this directory use `ipmi_config.env` for configuration (separate 
 - Queries all fan speed sensors
 - Displays fan speeds in a formatted table with columns: Fan Name, RPM, and Speed %
 - Shows summary statistics (total fans, average, min, max) with percentages
-- Appends data to `fan_speed_log.txt` for historical tracking
+- Appends data to `logs/fan_speed_log.txt` for historical tracking
 - **Read-only** - does not modify any settings
 
 ### `control_fan_speed.sh`
@@ -102,8 +102,8 @@ All scripts in this directory use `ipmi_config.env` for configuration (separate 
 ## Log Files
 
 These scripts create log files in the Scripts directory:
-- `temperature_log.txt` - Historical temperature data
-- `fan_speed_log.txt` - Historical fan speed data
+- `logs/temperature_log.txt` - Historical temperature data (in repo root logs/ directory)
+- `logs/fan_speed_log.txt` - Historical fan speed data (in repo root logs/ directory)
 
 These log files are automatically added to `.gitignore` to prevent committing sensitive data.
 

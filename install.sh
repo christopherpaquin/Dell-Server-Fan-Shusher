@@ -17,10 +17,13 @@ NC='\033[0m' # No Color
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPT_NAME="fan_control.py"
+LEARN_SCRIPT_NAME="learn_thresholds.py"
 ENV_EXAMPLE="env.example"
 ENV_FILE=".env"
 SERVICE_FILE="dell-r730-fan-control.service"
 TIMER_FILE="dell-r730-fan-control.timer"
+LEARN_SERVICE_FILE="dell-r730-fan-control-learning.service"
+LEARN_TIMER_FILE="dell-r730-fan-control-learning.timer"
 
 # Default values
 INSTALL_METHOD=""
@@ -314,6 +317,86 @@ WantedBy=timers.target"
     echo "  View logs: $SUDO journalctl -u dell-r730-fan-control.service -f"
     echo "  Stop: $SUDO systemctl stop dell-r730-fan-control.timer"
     echo "  Start: $SUDO systemctl start dell-r730-fan-control.timer"
+    echo ""
+    
+    # Install learning service and timer
+    echo -e "${GREEN}Installing adaptive learning service...${NC}"
+    
+    LEARN_SERVICE_CONTENT="[Unit]
+Description=Dell R730 Fan Control - Adaptive Learning
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=$(which python3) $SCRIPT_DIR/$LEARN_SCRIPT_NAME --auto-apply
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target"
+    
+    LEARN_TIMER_CONTENT="[Unit]
+Description=Run Dell R730 Fan Control Learning weekly
+Requires=$LEARN_SERVICE_FILE
+
+[Timer]
+OnCalendar=weekly
+OnBootSec=1week
+AccuracySec=1h
+RandomizedDelaySec=6h
+
+[Install]
+WantedBy=timers.target"
+    
+    # Write learning service file
+    if echo "$LEARN_SERVICE_CONTENT" | $SUDO tee "/etc/systemd/system/$LEARN_SERVICE_FILE" > /dev/null; then
+        echo "Learning service file created."
+    else
+        echo -e "${RED}Error: Failed to create learning service file.${NC}"
+        exit 1
+    fi
+    
+    # Write learning timer file
+    if echo "$LEARN_TIMER_CONTENT" | $SUDO tee "/etc/systemd/system/$LEARN_TIMER_FILE" > /dev/null; then
+        echo "Learning timer file created."
+    else
+        echo -e "${RED}Error: Failed to create learning timer file.${NC}"
+        exit 1
+    fi
+    
+    # Reload systemd
+    if $SUDO systemctl daemon-reload; then
+        echo "Systemd daemon reloaded."
+    else
+        echo -e "${RED}Error: Failed to reload systemd daemon.${NC}"
+        exit 1
+    fi
+    
+    # Enable learning timer
+    if $SUDO systemctl enable "$LEARN_TIMER_FILE"; then
+        echo "Learning timer enabled (runs weekly)."
+    else
+        echo -e "${YELLOW}Warning: Failed to enable learning timer.${NC}"
+    fi
+    
+    # Start learning timer
+    if $SUDO systemctl start "$LEARN_TIMER_FILE"; then
+        echo "Learning timer started."
+    else
+        echo -e "${YELLOW}Warning: Failed to start learning timer.${NC}"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}Adaptive learning system installed.${NC}"
+    echo "  Learning analysis runs weekly to optimize thresholds"
+    echo "  Set AUTO_APPLY_LEARNING=true in .env to enable automatic threshold updates"
+    echo ""
+    echo "Useful commands:"
+    echo "  Check learning status: $SUDO systemctl status $LEARN_TIMER_FILE"
+    echo "  View learning logs: $SUDO journalctl -u $LEARN_SERVICE_FILE -f"
+    echo "  Run learning manually: $SUDO systemctl start $LEARN_SERVICE_FILE"
     echo ""
 
 # Install cron job
