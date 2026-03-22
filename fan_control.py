@@ -51,13 +51,13 @@ SYSTEM_TEMP_HIGH = int(os.getenv('SYSTEM_TEMP_HIGH', '75'))
 SYSTEM_TEMP_VERY_HIGH = int(os.getenv('SYSTEM_TEMP_VERY_HIGH', '85'))
 
 # Fan speed percentages (0-100%) - 7 levels matching temperature ranges
-FAN_SPEED_VERY_LOW = int(os.getenv('FAN_SPEED_VERY_LOW', '10'))
-FAN_SPEED_LOW = int(os.getenv('FAN_SPEED_LOW', '15'))
-FAN_SPEED_MED_LOW = int(os.getenv('FAN_SPEED_MED_LOW', '25'))
-FAN_SPEED_MED = int(os.getenv('FAN_SPEED_MED', '35'))
-FAN_SPEED_MED_HIGH = int(os.getenv('FAN_SPEED_MED_HIGH', '50'))
-FAN_SPEED_HIGH = int(os.getenv('FAN_SPEED_HIGH', '65'))
-FAN_SPEED_VERY_HIGH = int(os.getenv('FAN_SPEED_VERY_HIGH', '80'))
+FAN_SPEED_VERY_LOW = int(os.getenv('FAN_SPEED_VERY_LOW', '20'))
+FAN_SPEED_LOW = int(os.getenv('FAN_SPEED_LOW', '25'))
+FAN_SPEED_MED_LOW = int(os.getenv('FAN_SPEED_MED_LOW', '35'))
+FAN_SPEED_MED = int(os.getenv('FAN_SPEED_MED', '45'))
+FAN_SPEED_MED_HIGH = int(os.getenv('FAN_SPEED_MED_HIGH', '60'))
+FAN_SPEED_HIGH = int(os.getenv('FAN_SPEED_HIGH', '75'))
+FAN_SPEED_VERY_HIGH = int(os.getenv('FAN_SPEED_VERY_HIGH', '90'))
 
 # Temperature threshold for switching to automatic mode (let iDRAC handle it)
 # If temps exceed this, disable manual mode and let iDRAC take over

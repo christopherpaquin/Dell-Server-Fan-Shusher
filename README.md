@@ -175,13 +175,13 @@ The system uses **7 temperature levels** for granular fan control, perfect for c
 | `SYSTEM_TEMP_HIGH` | High system temperature threshold (°C) | `80` |
 | `SYSTEM_TEMP_VERY_HIGH` | Very-High system temperature threshold (°C) | `90` |
 | **Fan Speed Percentages (7 levels)** |
-| `FAN_SPEED_VERY_LOW` | Very-Low fan speed percentage (0-100) | `10` |
-| `FAN_SPEED_LOW` | Low fan speed percentage (0-100) | `15` |
-| `FAN_SPEED_MED_LOW` | Medium-Low fan speed percentage (0-100) | `25` |
-| `FAN_SPEED_MED` | Medium fan speed percentage (0-100) | `35` |
-| `FAN_SPEED_MED_HIGH` | Medium-High fan speed percentage (0-100) | `50` |
-| `FAN_SPEED_HIGH` | High fan speed percentage (0-100) | `65` |
-| `FAN_SPEED_VERY_HIGH` | Very-High fan speed percentage (0-100) | `80` |
+| `FAN_SPEED_VERY_LOW` | Very-Low fan speed percentage (0-100) | `20` |
+| `FAN_SPEED_LOW` | Low fan speed percentage (0-100) | `25` |
+| `FAN_SPEED_MED_LOW` | Medium-Low fan speed percentage (0-100) | `35` |
+| `FAN_SPEED_MED` | Medium fan speed percentage (0-100) | `45` |
+| `FAN_SPEED_MED_HIGH` | Medium-High fan speed percentage (0-100) | `60` |
+| `FAN_SPEED_HIGH` | High fan speed percentage (0-100) | `75` |
+| `FAN_SPEED_VERY_HIGH` | Very-High fan speed percentage (0-100) | `90` |
 | **Other Settings** |
 | `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode (°C) | Auto (max of Very-High thresholds) |
 | `GPU_TEMP_OVERRIDE` | Prioritize GPU temps over system temps | `true` |
@@ -215,13 +215,13 @@ SYSTEM_TEMP_VERY_HIGH=90
 
 # Fan Speed Percentages (0-100) - 7 levels matching temperature ranges
 # For cold room scenarios, lower speeds can be used for lower temperature ranges
-FAN_SPEED_VERY_LOW=10
-FAN_SPEED_LOW=15
-FAN_SPEED_MED_LOW=25
-FAN_SPEED_MED=35
-FAN_SPEED_MED_HIGH=50
-FAN_SPEED_HIGH=65
-FAN_SPEED_VERY_HIGH=80
+FAN_SPEED_VERY_LOW=20
+FAN_SPEED_LOW=25
+FAN_SPEED_MED_LOW=35
+FAN_SPEED_MED=45
+FAN_SPEED_MED_HIGH=60
+FAN_SPEED_HIGH=75
+FAN_SPEED_VERY_HIGH=90
 
 # Switch to automatic mode when temps exceed this threshold
 AUTO_MODE_THRESHOLD=95
@@ -382,14 +382,14 @@ The script uses a **7-level temperature system** for granular fan control. It ch
 
 | Temperature | Fan Speed | Percentage | Description |
 |-------------|-----------|------------|-------------|
-| **≥ 90°C** | Very-High | 80% | Maximum cooling required |
-| **≥ 80°C** | High | 65% | High cooling needed |
-| **≥ 70°C** | Medium-High | 50% | Above-average cooling |
-| **≥ 60°C** | Medium | 35% | Moderate cooling |
-| **≥ 50°C** | Medium-Low | 25% | Light cooling |
-| **≥ 40°C** | Low | 15% | Minimal cooling (quiet) |
-| **≥ 25°C** | Very-Low | 10% | Very minimal cooling (very quiet) |
-| **< 25°C** | Very-Low | 10% | Very minimal cooling (very quiet) |
+| **≥ 90°C** | Very-High | 90% | Maximum cooling required |
+| **≥ 80°C** | High | 75% | High cooling needed |
+| **≥ 70°C** | Medium-High | 60% | Above-average cooling |
+| **≥ 60°C** | Medium | 45% | Moderate cooling |
+| **≥ 50°C** | Medium-Low | 35% | Light cooling |
+| **≥ 40°C** | Low | 25% | Minimal cooling (quiet) |
+| **≥ 25°C** | Very-Low | 20% | Very minimal cooling (very quiet) |
+| **< 25°C** | Very-Low | 20% | Very minimal cooling (very quiet) |
 | **≥ Auto Mode Threshold** | Automatic mode | - | iDRAC takes over control |
 
 **Important Notes:**

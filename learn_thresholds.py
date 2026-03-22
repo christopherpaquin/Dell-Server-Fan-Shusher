@@ -132,7 +132,7 @@ def suggest_threshold_adjustments(data, current_thresholds):
     efficiency = analyze_fan_efficiency(data)
     
     # Find optimal temperature ranges for each fan speed level
-    fan_speed_levels = [10, 15, 25, 35, 50, 65, 80]  # Current 7 levels
+    fan_speed_levels = [20, 25, 35, 45, 60, 75, 90]  # Current 7 levels
     
     for level in fan_speed_levels:
         if level not in efficiency:
