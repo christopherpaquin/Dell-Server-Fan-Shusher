@@ -73,6 +73,12 @@ IPMI_RETRIES = int(os.getenv('IPMI_RETRIES', '2'))  # number of retries
 # If GPU temps are above GPU_TEMP_LOW, they will be used for fan control
 GPU_TEMP_OVERRIDE = os.getenv('GPU_TEMP_OVERRIDE', 'true').lower() in ('true', '1', 'yes', 'on')
 
+# Inlet/Exhaust temperature floor - when inlet or exhaust exceeds these, enforce minimum fan speed
+# Helps protect NIC and other components in hot chassis environments
+INLET_TEMP_FLOOR_THRESHOLD = int(os.getenv('INLET_TEMP_FLOOR_THRESHOLD', '40'))  # °C
+EXHAUST_TEMP_FLOOR_THRESHOLD = int(os.getenv('EXHAUST_TEMP_FLOOR_THRESHOLD', '50'))  # °C
+INLET_EXHAUST_FLOOR_FAN_SPEED = int(os.getenv('INLET_EXHAUST_FLOOR_FAN_SPEED', str(FAN_SPEED_MED_LOW)))  # min % when floor triggered
+
 # Log file path
 LOG_FILE = os.getenv('LOG_FILE', '/var/log/dell-r730-fan-control.log')
 
@@ -417,6 +423,35 @@ def get_system_temperatures_sensors():
     return temps
 
 
+def get_inlet_exhaust_temps():
+    """
+    Get Inlet and Exhaust temperatures from iDRAC via IPMI.
+    Returns: dict with 'inlet', 'exhaust', 'differential' (exhaust - inlet), or empty dict on failure.
+    """
+    success, stdout, stderr = run_ipmi_command(['sensor', 'list'])
+    if not success:
+        return {}
+    result = {}
+    for line in stdout.split('\n'):
+        if 'Inlet Temp' in line:
+            match = re.search(r'\|\s*([\d.]+)\s*\|', line)
+            if match:
+                try:
+                    result['inlet'] = int(float(match.group(1)))
+                except (ValueError, TypeError):
+                    pass
+        elif 'Exhaust Temp' in line:
+            match = re.search(r'\|\s*([\d.]+)\s*\|', line)
+            if match:
+                try:
+                    result['exhaust'] = int(float(match.group(1)))
+                except (ValueError, TypeError):
+                    pass
+    if 'inlet' in result and 'exhaust' in result:
+        result['differential'] = result['exhaust'] - result['inlet']
+    return result
+
+
 def get_system_temperatures():
     """
     Get system temperatures from multiple sources.
@@ -520,10 +555,10 @@ def get_fan_speeds_sensors():
     return speeds
 
 
-def log_unified_data(gpu_temps, system_temps, fan_speeds, fan_speed_pct):
+def log_unified_data(gpu_temps, system_temps, fan_speeds, fan_speed_pct, inlet_exhaust=None):
     """
     Log unified data (temperatures + fan speeds) for learning/analysis.
-    Format: timestamp|max_gpu_temp|max_system_temp|avg_fan_rpm|fan_speed_pct|gpu_temps_csv|system_temps_csv|fan_speeds_csv
+    Format: timestamp|max_gpu_temp|max_system_temp|avg_fan_rpm|fan_speed_pct|gpu_temps_csv|system_temps_csv|fan_speeds_csv|inlet|exhaust|differential
     """
     try:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -531,12 +566,16 @@ def log_unified_data(gpu_temps, system_temps, fan_speeds, fan_speed_pct):
         max_system = max(system_temps) if system_temps else 0
         avg_fan_rpm = int(sum(fan_speeds) / len(fan_speeds)) if fan_speeds else 0
         fan_pct = fan_speed_pct if fan_speed_pct is not None else 0
-        
+
         gpu_csv = ','.join(map(str, gpu_temps)) if gpu_temps else ''
         system_csv = ','.join(map(str, system_temps)) if system_temps else ''
         fan_csv = ','.join(map(str, fan_speeds)) if fan_speeds else ''
-        
-        log_entry = f"{timestamp}|{max_gpu}|{max_system}|{avg_fan_rpm}|{fan_pct}|{gpu_csv}|{system_csv}|{fan_csv}\n"
+
+        inlet = inlet_exhaust.get('inlet', '') if inlet_exhaust else ''
+        exhaust = inlet_exhaust.get('exhaust', '') if inlet_exhaust else ''
+        diff = inlet_exhaust.get('differential', '') if inlet_exhaust else ''
+
+        log_entry = f"{timestamp}|{max_gpu}|{max_system}|{avg_fan_rpm}|{fan_pct}|{gpu_csv}|{system_csv}|{fan_csv}|{inlet}|{exhaust}|{diff}\n"
         
         # Ensure log directory exists
         log_dir = os.path.dirname(DATA_LOG_FILE)
@@ -715,7 +754,18 @@ def check_temperatures():
     # Get temperatures
     gpu_temps = get_gpu_temperatures()
     system_temps = get_system_temperatures()
-    
+    inlet_exhaust = get_inlet_exhaust_temps()
+
+    # Display inlet/exhaust
+    if inlet_exhaust:
+        print(f"Inlet/Exhaust Temperatures:")
+        print(f"  Inlet: {inlet_exhaust.get('inlet', 'N/A')}°C")
+        print(f"  Exhaust: {inlet_exhaust.get('exhaust', 'N/A')}°C")
+        print(f"  Differential (exhaust - inlet): {inlet_exhaust.get('differential', 'N/A')}°C")
+    else:
+        print("Inlet/Exhaust: Unable to read (requires IPMI)")
+    print()
+
     # Display GPU temperatures
     if gpu_temps:
         print(f"GPU Temperatures:")
@@ -970,7 +1020,8 @@ Examples:
     # Get temperatures
     gpu_temps = get_gpu_temperatures()
     system_temps = get_system_temperatures()
-    
+    inlet_exhaust = get_inlet_exhaust_temps()
+
     # Log temperature readings
     if gpu_temps:
         logger.info(f"GPU Temperatures: {', '.join(map(str, gpu_temps))}°C (max: {max(gpu_temps)}°C)")
@@ -981,7 +1032,15 @@ Examples:
         logger.info(f"System Temperatures: {', '.join(map(str, system_temps))}°C (max: {max(system_temps)}°C)")
     else:
         logger.warning("System Temperatures: Unable to read")
-    
+
+    if inlet_exhaust:
+        inlet = inlet_exhaust.get('inlet', 'N/A')
+        exhaust = inlet_exhaust.get('exhaust', 'N/A')
+        diff = inlet_exhaust.get('differential', 'N/A')
+        logger.info(f"Inlet: {inlet}°C, Exhaust: {exhaust}°C, Differential: {diff}°C")
+    else:
+        logger.info("Inlet/Exhaust: Unable to read (requires IPMI)")
+
     # Get current fan speeds before making changes (for comparison)
     current_fan_speeds = get_fan_speeds()
     current_fan_speed_pct = None
@@ -991,7 +1050,20 @@ Examples:
     
     # Determine action
     action, speed, reason = determine_fan_action(gpu_temps, system_temps)
-    
+
+    # Apply inlet/exhaust floor - boost minimum when chassis is hot (protects NIC, etc.)
+    if action == 'manual' and speed is not None and inlet_exhaust:
+        inlet = inlet_exhaust.get('inlet')
+        exhaust = inlet_exhaust.get('exhaust')
+        if inlet is not None and inlet >= INLET_TEMP_FLOOR_THRESHOLD:
+            if speed < INLET_EXHAUST_FLOOR_FAN_SPEED:
+                reason = f"{reason}; Inlet {inlet}°C >= {INLET_TEMP_FLOOR_THRESHOLD}°C - applying floor {INLET_EXHAUST_FLOOR_FAN_SPEED}%"
+                speed = INLET_EXHAUST_FLOOR_FAN_SPEED
+        elif exhaust is not None and exhaust >= EXHAUST_TEMP_FLOOR_THRESHOLD:
+            if speed < INLET_EXHAUST_FLOOR_FAN_SPEED:
+                reason = f"{reason}; Exhaust {exhaust}°C >= {EXHAUST_TEMP_FLOOR_THRESHOLD}°C - applying floor {INLET_EXHAUST_FLOOR_FAN_SPEED}%"
+                speed = INLET_EXHAUST_FLOOR_FAN_SPEED
+
     # Log the decision reasoning
     logger.info(f"Decision: {reason}")
     
@@ -1002,7 +1074,7 @@ Examples:
         enable_automatic_fan_mode()
         # Log data even in auto mode
         if current_fan_speeds:
-            log_unified_data(gpu_temps, system_temps, current_fan_speeds, None)
+            log_unified_data(gpu_temps, system_temps, current_fan_speeds, None, inlet_exhaust)
     else:
         # Enable manual mode and set fan speed
         if enable_manual_fan_mode():
@@ -1033,12 +1105,12 @@ Examples:
                         logger.info(f"Fan speeds after change: {', '.join(map(str, new_fan_speeds))} RPM (avg: {avg_new_speed} RPM)")
                     
                     # Log unified data for learning (after fan speed change)
-                    log_unified_data(gpu_temps, system_temps, new_fan_speeds, speed)
+                    log_unified_data(gpu_temps, system_temps, new_fan_speeds, speed, inlet_exhaust)
             else:
                 logger.error("Failed to set fan speed")
                 # Still log data even if fan speed change failed
                 if current_fan_speeds:
-                    log_unified_data(gpu_temps, system_temps, current_fan_speeds, None)
+                    log_unified_data(gpu_temps, system_temps, current_fan_speeds, None, inlet_exhaust)
         else:
             logger.error("Failed to enable manual mode")
             sys.exit(1)
