@@ -24,6 +24,7 @@ SERVICE_FILE="dell-r730-fan-control.service"
 TIMER_FILE="dell-r730-fan-control.timer"
 LEARN_SERVICE_FILE="dell-r730-fan-control-learning.service"
 LEARN_TIMER_FILE="dell-r730-fan-control-learning.timer"
+LOGROTATE_FILE="logrotate.dell-r730-fan-control"
 
 # Default values
 INSTALL_METHOD=""
@@ -443,6 +444,19 @@ elif [ "$INSTALL_METHOD" = "cron" ]; then
     fi
     echo ""
 fi
+
+# Install logrotate configuration
+echo -e "${GREEN}Installing logrotate configuration...${NC}"
+if [ -f "$SCRIPT_DIR/$LOGROTATE_FILE" ]; then
+    if $SUDO cp "$SCRIPT_DIR/$LOGROTATE_FILE" /etc/logrotate.d/dell-r730-fan-control 2>/dev/null; then
+        echo -e "${GREEN}Logrotate config installed to /etc/logrotate.d/dell-r730-fan-control${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to install logrotate config. You may need to copy $SCRIPT_DIR/$LOGROTATE_FILE to /etc/logrotate.d/dell-r730-fan-control manually.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Warning: Logrotate config file $SCRIPT_DIR/$LOGROTATE_FILE not found. Skipping.${NC}"
+fi
+echo ""
 
 # Test run
 echo -e "${GREEN}Performing test run...${NC}"

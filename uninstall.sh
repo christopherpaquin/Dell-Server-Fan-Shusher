@@ -131,6 +131,13 @@ else
     echo -e "${GREEN}No cron jobs found.${NC}"
 fi
 
+# Remove logrotate configuration
+if [ -f /etc/logrotate.d/dell-r730-fan-control ]; then
+    echo -e "${GREEN}Removing logrotate configuration...${NC}"
+    $SUDO rm -f /etc/logrotate.d/dell-r730-fan-control 2>/dev/null || true
+    echo "Logrotate config removed."
+fi
+
 echo ""
 echo -e "${GREEN}Uninstallation complete!${NC}"
 echo ""
