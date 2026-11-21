@@ -79,6 +79,17 @@ INLET_TEMP_FLOOR_THRESHOLD = int(os.getenv('INLET_TEMP_FLOOR_THRESHOLD', '40')) 
 EXHAUST_TEMP_FLOOR_THRESHOLD = int(os.getenv('EXHAUST_TEMP_FLOOR_THRESHOLD', '50'))  # °C
 INLET_EXHAUST_FLOOR_FAN_SPEED = int(os.getenv('INLET_EXHAUST_FLOOR_FAN_SPEED', str(FAN_SPEED_MED_LOW)))  # min % when floor triggered
 
+# NIC / HCA temperatures (ConnectX via mstflint's MTMP register, and any network adapter that
+# exposes a hwmon sensor). Above the floor threshold the fans never go below the floor speed;
+# above the auto threshold the iDRAC takes over. ConnectX-4's own warning threshold is ~105 °C.
+NIC_TEMP_FLOOR_THRESHOLD = int(os.getenv('NIC_TEMP_FLOOR_THRESHOLD', '85'))  # °C
+NIC_TEMP_FLOOR_FAN_SPEED = int(os.getenv('NIC_TEMP_FLOOR_FAN_SPEED', str(FAN_SPEED_MED)))  # %
+NIC_TEMP_AUTO_THRESHOLD = int(os.getenv('NIC_TEMP_AUTO_THRESHOLD', '95'))  # °C
+
+PCI_DEVICES = '/sys/bus/pci/devices'
+NVIDIA_VENDOR = '0x10de'
+MELLANOX_VENDOR = '0x15b3'
+
 # Log file path
 LOG_FILE = os.getenv('LOG_FILE', '/var/log/dell-r730-fan-control.log')
 
@@ -631,6 +642,101 @@ def get_fan_speeds():
     return speeds
 
 
+def _pci_devices(vendor=None, class_prefixes=()):
+    """(address, vendor, class) for PCI devices from sysfs, optionally filtered."""
+    out = []
+    try:
+        names = sorted(os.listdir(PCI_DEVICES))
+    except OSError:
+        return out
+    for addr in names:
+        try:
+            with open(os.path.join(PCI_DEVICES, addr, 'vendor')) as f:
+                ven = f.read().strip()
+            with open(os.path.join(PCI_DEVICES, addr, 'class')) as f:
+                cls = f.read().strip()
+        except OSError:
+            continue
+        if vendor and ven != vendor:
+            continue
+        if class_prefixes and not any(cls.startswith(c) for c in class_prefixes):
+            continue
+        out.append((addr, ven, cls))
+    return out
+
+
+def nvidia_gpus_present():
+    """True if an NVIDIA display/3D controller (PCI class 0x03xxxx) is in the box."""
+    return bool(_pci_devices(NVIDIA_VENDOR, ('0x03',)))
+
+
+def get_nic_temperatures_hwmon():
+    """Temperatures of network adapters (PCI class 0x02xxxx) that expose hwmon sensors."""
+    temps = []
+    base = '/sys/class/hwmon'
+    try:
+        entries = os.listdir(base)
+    except OSError:
+        return temps
+    for entry in entries:
+        dev = os.path.join(base, entry, 'device')
+        try:
+            with open(os.path.join(dev, 'class')) as f:
+                if not f.read().strip().startswith('0x02'):
+                    continue
+            files = os.listdir(os.path.join(base, entry))
+        except OSError:
+            continue
+        for name in files:
+            if name.startswith('temp') and name.endswith('_input'):
+                try:
+                    with open(os.path.join(base, entry, name)) as f:
+                        temps.append(int(f.read().strip()) // 1000)
+                except (OSError, ValueError):
+                    continue
+    return temps
+
+
+def get_nic_temperatures_mlx():
+    """ConnectX temperatures via mstflint's MTMP register (units of 0.125 °C).
+    One reading per adapter (function 0); silently empty without mstflint."""
+    temps = []
+    seen = set()
+    for addr, _ven, _cls in _pci_devices(MELLANOX_VENDOR, ('0x02',)):
+        slot = addr.rsplit('.', 1)[0]
+        if slot in seen:
+            continue
+        seen.add(slot)
+        try:
+            result = subprocess.run(
+                ['mstreg', '-d', addr, '--reg_name', 'MTMP', '--get', '--indexes', 'sensor_index=0x0'],
+                capture_output=True, text=True, timeout=IPMI_TIMEOUT,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+        match = re.search(r'^temperature\s*\|\s*(0x[0-9a-fA-F]+)', result.stdout, re.M)
+        if result.returncode == 0 and match:
+            temps.append(int(match.group(1), 16) // 8)
+    return temps
+
+
+def get_nic_temperatures():
+    return get_nic_temperatures_hwmon() + get_nic_temperatures_mlx()
+
+
+def safety_override(gpu_temps, system_temps, nic_temps, gpus_present):
+    """Hand the fans to the iDRAC whenever a reading the decision depends on is missing or
+    a NIC is hot. Returns a reason string, or None when manual control is safe.
+    Missing readings used to count as 0 °C and pin fans at the lowest speed."""
+    if gpus_present and not gpu_temps:
+        return "NVIDIA GPUs present but no GPU temperature readable (driver missing?) - iDRAC takes over"
+    if not system_temps:
+        return "System temperatures unreadable - iDRAC takes over"
+    if nic_temps and max(nic_temps) >= NIC_TEMP_AUTO_THRESHOLD:
+        return f"NIC temperature {max(nic_temps)}°C >= auto threshold ({NIC_TEMP_AUTO_THRESHOLD}°C) - iDRAC takes over"
+    return None
+
+
 def determine_fan_action(gpu_temps, system_temps):
     """
     Determine what action to take based on temperatures.
@@ -1048,8 +1154,20 @@ Examples:
         avg_current_speed = sum(current_fan_speeds) // len(current_fan_speeds)
         logger.info(f"Current Fan Speeds: {', '.join(map(str, current_fan_speeds))} RPM (avg: {avg_current_speed} RPM)")
     
+    nic_temps = get_nic_temperatures()
+    if nic_temps:
+        logger.info(f"NIC Temperatures: {', '.join(map(str, nic_temps))}°C (max: {max(nic_temps)}°C)")
+
     # Determine action
     action, speed, reason = determine_fan_action(gpu_temps, system_temps)
+    override = safety_override(gpu_temps, system_temps, nic_temps, nvidia_gpus_present())
+    if override:
+        action, speed, reason = 'auto', None, override
+    elif action == 'manual' and speed is not None and nic_temps and max(nic_temps) >= NIC_TEMP_FLOOR_THRESHOLD:
+        if speed < NIC_TEMP_FLOOR_FAN_SPEED:
+            reason = (f"{reason}; NIC {max(nic_temps)}°C >= {NIC_TEMP_FLOOR_THRESHOLD}°C"
+                      f" - applying floor {NIC_TEMP_FLOOR_FAN_SPEED}%")
+            speed = NIC_TEMP_FLOOR_FAN_SPEED
 
     # Apply inlet/exhaust floor - boost minimum when chassis is hot (protects NIC, etc.)
     if action == 'manual' and speed is not None and inlet_exhaust:

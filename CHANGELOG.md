@@ -5,12 +5,21 @@ All notable changes to Dell-Server-Fan-Shusher will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `install.sh --non-interactive [--interval N]`: systemd timer install with no prompts (for automated builds);
+  skips pip when `python-dotenv` is already importable (e.g. apt `python3-dotenv`; pip is blocked by PEP 668 on new distros)
+- NIC/HCA temperatures: ConnectX adapters via `mstflint`'s `mstreg` MTMP register, plus any network adapter with a
+  hwmon sensor. `NIC_TEMP_FLOOR_THRESHOLD` / `NIC_TEMP_FLOOR_FAN_SPEED` / `NIC_TEMP_AUTO_THRESHOLD`
+- `tests/` (pytest) for the safety fallback and NIC parsing
 - Dell R720 compatibility support
 - R730 compatibility test script (`TEST_R730.sh`)
 - Comprehensive testing documentation (`R730_TEST_INSTRUCTIONS.md`)
 - R720 compatibility documentation (`R720_COMPATIBILITY.md`)
 
 ### Fixed
+- **SAFETY**: missing readings no longer count as 0 °C. With NVIDIA GPUs present but no GPU temperature readable
+  (e.g. no driver), or no system temperature, the script hands the fans to the iDRAC (automatic mode). Before, it
+  pinned the fans at the lowest speed, which can overheat passively cooled Tesla cards (seen on an R730 with 2× T4
+  and no driver: the old logic chose 25 %).
 - **CRITICAL FIX**: IPMI hex value formatting for Dell R720 compatibility
   - Changed: `hex_value = format(percentage, '02x')` → produces `0a`
   - To: `hex_value = f'0x{percentage:02x}'` → produces `0x0a`

@@ -28,6 +28,40 @@ LOGROTATE_FILE="logrotate.dell-r730-fan-control"
 
 # Default values
 INSTALL_METHOD=""
+NON_INTERACTIVE=false
+INTERVAL=30
+
+usage() {
+    echo "usage: $0 [--non-interactive] [--interval SECONDS]"
+    echo "  --non-interactive  systemd timer install, no prompts, test run without asking"
+    echo "  --interval N       timer interval in seconds (default 30)"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --non-interactive) NON_INTERACTIVE=true ;;
+        --interval)
+            [ $# -ge 2 ] || { usage; exit 2; }
+            INTERVAL="$2"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage; exit 2 ;;
+    esac
+    shift
+done
+if ! [[ "$INTERVAL" =~ ^[0-9]+$ ]] || [ "$INTERVAL" -lt 5 ]; then
+    echo "--interval must be a whole number of seconds >= 5" >&2
+    exit 2
+fi
+
+# ask PROMPT DEFAULT VAR: read an answer, or take DEFAULT in --non-interactive mode.
+ask() {
+    if [ "$NON_INTERACTIVE" = true ]; then
+        printf -v "$3" '%s' "$2"
+    else
+        read -r -p "$1" "$3"
+        [ -n "${!3}" ] || printf -v "$3" '%s' "$2"
+    fi
+}
 CRON_INTERVAL=30  # seconds
 LOG_DIR="/var/log"
 
@@ -105,7 +139,9 @@ echo "Python version: $PYTHON_VERSION"
 # Install Python dependencies
 echo ""
 echo -e "${GREEN}Installing Python dependencies...${NC}"
-if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+if python3 -c "import dotenv" 2>/dev/null; then
+    echo -e "${GREEN}python-dotenv already available (e.g. apt python3-dotenv).${NC}"
+elif [ -f "$SCRIPT_DIR/requirements.txt" ]; then
     if pip3 install -r "$SCRIPT_DIR/requirements.txt" --user 2>/dev/null; then
         echo -e "${GREEN}Python dependencies installed.${NC}"
     else
@@ -207,7 +243,7 @@ echo -e "${GREEN}Select installation method:${NC}"
 echo "1) Systemd service (recommended)"
 echo "2) Cron job"
 echo "3) Skip (manual setup)"
-read -p "Enter choice [1-3]: " INSTALL_CHOICE
+ask "Enter choice [1-3]: " 1 INSTALL_CHOICE
 
 case $INSTALL_CHOICE in
     1)
@@ -250,8 +286,7 @@ StandardError=journal
 WantedBy=multi-user.target"
 
     # Update timer file
-    read -p "Enter check interval in seconds [30]: " TIMER_INTERVAL
-    TIMER_INTERVAL=${TIMER_INTERVAL:-30}
+    ask "Enter check interval in seconds [$INTERVAL]: " "$INTERVAL" TIMER_INTERVAL
     
     TIMER_CONTENT="[Unit]
 Description=Run Dell R730 Fan Control periodically
@@ -405,7 +440,7 @@ elif [ "$INSTALL_METHOD" = "cron" ]; then
     echo ""
     echo -e "${GREEN}Installing cron job...${NC}"
     
-    read -p "Enter check interval in seconds [30]: " CRON_INTERVAL
+    ask "Enter check interval in seconds [$INTERVAL]: " "$INTERVAL" CRON_INTERVAL
     CRON_INTERVAL=${CRON_INTERVAL:-30}
     
     PYTHON_PATH=$(which python3)
@@ -474,7 +509,7 @@ fi
 if [ "$DEFAULT_PASS_DETECTED" = true ]; then
     echo -e "${YELLOW}Warning: Default password detected in .env file.${NC}"
     echo -e "${YELLOW}Please update $SCRIPT_DIR/$ENV_FILE with your actual iDRAC credentials before running.${NC}"
-    read -p "Continue with test run anyway? [y/N]: " TEST_RUN
+    ask "Continue with test run anyway? [y/N]: " N TEST_RUN
     if [[ ! "$TEST_RUN" =~ ^[Yy]$ ]]; then
         echo "Skipping test run."
         echo -e "${YELLOW}Remember to update .env file before using the script!${NC}"

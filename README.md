@@ -145,6 +145,24 @@ The install script will:
 
 ---
 
+### 🤖 Non-interactive install
+
+For automated builds (no prompts, systemd timer):
+
+```bash
+sudo apt install ipmitool python3-dotenv mstflint   # mstflint only for ConnectX NIC temperatures
+cp env.example .env && $EDITOR .env               # iDRAC IP/user/password
+sudo ./install.sh --non-interactive --interval 30
+```
+
+### 🛡️ Safety fallback
+
+If NVIDIA GPUs are present but no GPU temperature can be read (for example, the driver isn't installed), or no system
+temperature can be read, or a NIC reaches `NIC_TEMP_AUTO_THRESHOLD`, the script switches the fans to iDRAC automatic
+mode instead of choosing a speed from incomplete data.
+
+---
+
 ## ⚙️ Configuration
 
 Edit the `.env` file to configure all settings:
