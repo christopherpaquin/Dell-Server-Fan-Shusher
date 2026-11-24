@@ -55,8 +55,9 @@ A Python script that intelligently controls fan speeds on Dell R720/R730 servers
 
 | Feature | Description |
 |---------|-------------|
-| 🔥 **Multi-Vendor GPU Support** | Supports NVIDIA (nvidia-smi), AMD (rocm-smi/sensors), and Intel (intel_gpu_top/sensors) GPUs |
-| 🌡️ **System Temperature Monitoring** | Monitors system temperatures via `ipmitool` |
+| 🔥 **Multi-Vendor GPU Support (Auto-Skipped When Absent)** | Supports NVIDIA (`nvidia-smi`), AMD (`rocm-smi`/`sensors`), and Intel (`intel_gpu_top`/`sensors`) GPUs; automatically skips GPU probes when no discrete GPUs are present on PCI |
+| 🌐 **NVIDIA BlueField DPU & ConnectX Support** | Dedicated 7-level thermal curve and safety handoff for BlueField-2/3 DPUs (`mlx5` `hwmon` + `mstflint` `MTMP`), plus floor/auto protection for ConnectX and hwmon NICs |
+| 🌡️ **Isolated System Temperature Monitoring** | Monitors trusted CPU/chassis temperatures (`coretemp`/`k10temp`/IPMI) without mixing in PCI GPU/NIC/DPU ASIC sensors |
 | ⚙️ **Adaptive Fan Control** | Automatically adjusts fan speeds based on temperature thresholds |
 | 🧠 **Smart Mode Switching** | Switches to automatic iDRAC control when temperatures are high |
 | 📝 **Verbose Logging** | Detailed logging with decision reasoning, actions taken, and fan speed change tracking |
@@ -157,9 +158,12 @@ sudo ./install.sh --non-interactive --interval 30
 
 ### 🛡️ Safety fallback
 
-If NVIDIA GPUs are present but no GPU temperature can be read (for example, the driver isn't installed), or no system
-temperature can be read, or a NIC reaches `NIC_TEMP_AUTO_THRESHOLD`, the script switches the fans to iDRAC automatic
-mode instead of choosing a speed from incomplete data.
+If discrete GPUs or NVIDIA BlueField DPUs are physically present on the PCI bus but any card's temperature cannot be
+read (for example, missing drivers or `mstflint`), if PCI device discovery is incomplete, if no system temperature can
+be read, or if a BlueField DPU (`BF_TEMP_AUTO_THRESHOLD`, default `95°C`) or NIC (`NIC_TEMP_AUTO_THRESHOLD`, default
+`95°C`) reaches its automatic threshold, the script hands fan control back to iDRAC automatic mode (and exits non-zero if
+the IPMI handoff fails). When no discrete GPUs are present on the PCI bus (ignoring onboard BMC video such as Matrox
+G200eR2 or ASPEED), GPU temperature checks are skipped completely.
 
 ---
 
@@ -200,9 +204,22 @@ The system uses **7 temperature levels** for granular fan control, perfect for c
 | `FAN_SPEED_MED_HIGH` | Medium-High fan speed percentage (0-100) | `60` |
 | `FAN_SPEED_HIGH` | High fan speed percentage (0-100) | `75` |
 | `FAN_SPEED_VERY_HIGH` | Very-High fan speed percentage (0-100) | `90` |
+| **BlueField DPU Thresholds (7 levels + Auto)** |
+| `BF_TEMP_VERY_LOW` | Very-Low BlueField DPU threshold (°C) | `50` |
+| `BF_TEMP_LOW` | Low BlueField DPU threshold (°C) | `60` |
+| `BF_TEMP_MED_LOW` | Medium-Low BlueField DPU threshold (°C) | `68` |
+| `BF_TEMP_MED` | Medium BlueField DPU threshold (°C) | `75` |
+| `BF_TEMP_MED_HIGH` | Medium-High BlueField DPU threshold (°C) | `82` |
+| `BF_TEMP_HIGH` | High BlueField DPU threshold (°C) | `88` |
+| `BF_TEMP_VERY_HIGH` | Very-High BlueField DPU threshold (°C) | `92` |
+| `BF_TEMP_AUTO_THRESHOLD` | BlueField auto-mode handoff threshold (°C) | `95` |
+| **NIC / Chassis Floor Settings** |
+| `NIC_TEMP_FLOOR_THRESHOLD` | Plain NIC temperature floor trigger (°C) | `85` |
+| `NIC_TEMP_FLOOR_FAN_SPEED` | Minimum fan speed % when NIC floor triggers | `45` |
+| `NIC_TEMP_AUTO_THRESHOLD` | Plain NIC auto-mode handoff threshold (°C) | `95` |
 | **Other Settings** |
-| `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode (°C) | Auto (max of Very-High thresholds) |
-| `GPU_TEMP_OVERRIDE` | Prioritize GPU temps over system temps | `true` |
+| `AUTO_MODE_THRESHOLD` | Temperature threshold for auto mode on GPU/System (°C) | Auto (max of Very-High thresholds; `75` in `env.example`) |
+| `GPU_TEMP_OVERRIDE` | Compatibility flag for GPU curve annotation (never suppresses higher CPU/BlueField demand) | `true` |
 | `LOG_FILE` | Log file path | `/var/log/dell-r730-fan-control.log` (falls back to `logs/fan_control.log`) |
 
 ### Example Configuration
@@ -368,7 +385,7 @@ python3 fan_control.py --help
    ```bash
    # Run every 5 minutes
    */5 * * * * /usr/bin/python3 /path/to/fan_control.py
-   
+
    # Or run every 30 seconds (requires two entries)
    * * * * * /usr/bin/python3 /path/to/fan_control.py
    * * * * * sleep 30; /usr/bin/python3 /path/to/fan_control.py

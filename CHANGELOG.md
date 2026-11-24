@@ -5,17 +5,21 @@ All notable changes to Dell-Server-Fan-Shusher will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **BlueField DPU (BF2 / BF3) thermal awareness**: detects BlueField cards on the PCI bus (`15b3:a2d6` / `15b3:c2d3`, etc.), reads per-card temperatures via `mlx5` `hwmon` with automatic `mstreg` `MTMP` fallback across present PFs, logs `BlueField Temperatures` (including `--temps`, `--history`, and `--history-detailed`), and drives a dedicated 7-level `BF_TEMP_*` fan curve (`50/60/68/75/82/88/92°C`, automatic iDRAC handoff at `BF_TEMP_AUTO_THRESHOLD=95°C` or if any detected BlueField card is unreadable)
+- **GPU presence gating**: checks `/sys/bus/pci/devices` for discrete GPUs (NVIDIA, AMD, Intel display/3D controllers while ignoring onboard Matrox/ASPEED BMC video) and skips all GPU monitoring tool subprocesses (`nvidia-smi`, `rocm-smi`, `intel_gpu_top`, `sensors`) when no GPUs are installed
 - `install.sh --non-interactive [--interval N]`: systemd timer install with no prompts (for automated builds);
   skips pip when `python-dotenv` is already importable (e.g. apt `python3-dotenv`; pip is blocked by PEP 668 on new distros)
 - NIC/HCA temperatures: ConnectX adapters via `mstflint`'s `mstreg` MTMP register, plus any network adapter with a
   hwmon sensor. `NIC_TEMP_FLOOR_THRESHOLD` / `NIC_TEMP_FLOOR_FAN_SPEED` / `NIC_TEMP_AUTO_THRESHOLD`
-- `tests/` (pytest) for the safety fallback and NIC parsing
+- `tests/` (pytest) for GPU absence skipping, BlueField DPU thermal curves, hwmon/lm-sensors attribution, safety fallbacks, and NIC parsing
 - Dell R720 compatibility support
 - R730 compatibility test script (`TEST_R730.sh`)
 - Comprehensive testing documentation (`R730_TEST_INSTRUCTIONS.md`)
 - R720 compatibility documentation (`R720_COMPATIBILITY.md`)
 
 ### Fixed
+- **Sensor isolation**: excluded PCI GPU, BlueField DPU, and NIC `hwmon` / `lm-sensors` blocks (`mlx5`, `amdgpu`, etc.) from `System Temperatures` so idle ~60°C Mellanox/BlueField ASICs no longer falsely trigger CPU/system medium/high fan speeds
+- **Safety exit codes & installer sequencing**: `fan_control.py` now exits non-zero when either automatic-mode handoff or manual fan-speed IPMI commands fail, and `install.sh` quiesces active timers before running its verification check to prevent overlapping IPMI writes
 - **SAFETY**: missing readings no longer count as 0 °C. With NVIDIA GPUs present but no GPU temperature readable
   (e.g. no driver), or no system temperature, the script hands the fans to the iDRAC (automatic mode). Before, it
   pinned the fans at the lowest speed, which can overheat passively cooled Tesla cards (seen on an R730 with 2× T4

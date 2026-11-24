@@ -71,7 +71,7 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     echo -e "${YELLOW}Warning: Not running as root. Some operations may require sudo.${NC}"
     SUDO="sudo"
 else
@@ -95,7 +95,25 @@ if ! command_exists ipmitool; then
     MISSING_DEPS+=("ipmitool")
 fi
 
-# Check for GPU monitoring tools (at least one should be available)
+# Detect discrete GPUs (NVIDIA 0x10de, AMD 0x1002, Intel 0x8086 in PCI class 0x03*) and Mellanox/BlueField (0x15b3)
+PCI_GPU_FOUND=false
+PCI_MLX_FOUND=false
+if [ -d /sys/bus/pci/devices ]; then
+    for dev in /sys/bus/pci/devices/*; do
+        [ -d "$dev" ] || continue
+        [ -e "$dev/physfn" ] && continue
+        ven=$(tr '[:upper:]' '[:lower:]' < "$dev/vendor" 2>/dev/null || true)
+        cls=$(tr '[:upper:]' '[:lower:]' < "$dev/class" 2>/dev/null || true)
+        if [[ "$cls" == 0x03* ]] && { [ "$ven" = "0x10de" ] || [ "$ven" = "0x1002" ] || [ "$ven" = "0x8086" ]; }; then
+            PCI_GPU_FOUND=true
+        fi
+        if [ "$ven" = "0x15b3" ]; then
+            PCI_MLX_FOUND=true
+        fi
+    done
+fi
+
+# Check for GPU monitoring tools (only warn if discrete GPUs are present)
 GPU_TOOL_FOUND=false
 if command_exists nvidia-smi; then
     echo -e "${GREEN}Found: nvidia-smi (NVIDIA GPU support)${NC}"
@@ -110,17 +128,25 @@ if command_exists intel_gpu_top; then
     GPU_TOOL_FOUND=true
 fi
 if command_exists sensors; then
-    echo -e "${GREEN}Found: sensors (lm-sensors - AMD/Intel GPU support)${NC}"
+    echo -e "${GREEN}Found: sensors (lm-sensors - CPU / AMD / Intel / mlx5 support)${NC}"
     GPU_TOOL_FOUND=true
 fi
+if command_exists mstreg; then
+    echo -e "${GREEN}Found: mstreg (mstflint - Mellanox ConnectX / BlueField DPU MTMP support)${NC}"
+elif [ "$PCI_MLX_FOUND" = true ]; then
+    echo -e "${YELLOW}Warning: Mellanox / BlueField PCI adapter detected, but mstreg (mstflint) is not installed.${NC}"
+    echo -e "${YELLOW}  Install mstflint if your adapter does not expose mlx5 hwmon sensors.${NC}"
+fi
 
-if [ "$GPU_TOOL_FOUND" = false ]; then
-    echo -e "${YELLOW}Warning: No GPU monitoring tools found.${NC}"
+if [ "$PCI_GPU_FOUND" = false ]; then
+    echo -e "${GREEN}No discrete GPUs detected on PCI bus — GPU temperature checks will be skipped.${NC}"
+elif [ "$GPU_TOOL_FOUND" = false ]; then
+    echo -e "${YELLOW}Warning: Discrete GPU detected on PCI bus, but no GPU monitoring tools found.${NC}"
     echo -e "${YELLOW}  Install one of the following for GPU temperature monitoring:${NC}"
     echo -e "${YELLOW}    - NVIDIA: nvidia-smi (NVIDIA drivers)${NC}"
     echo -e "${YELLOW}    - AMD: rocm-smi (ROCm) or sensors (lm-sensors)${NC}"
     echo -e "${YELLOW}    - Intel: intel_gpu_top (intel-gpu-tools) or sensors (lm-sensors)${NC}"
-    echo -e "${YELLOW}  Script will use system temperatures only.${NC}"
+    echo -e "${YELLOW}  Until readable, iDRAC automatic fan control will take over for safety.${NC}"
 fi
 
 if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
@@ -266,12 +292,16 @@ esac
 if [ "$INSTALL_METHOD" = "systemd" ]; then
     echo ""
     echo -e "${GREEN}Installing systemd service...${NC}"
-    
+
+    # Quiesce any existing timers/services before updating unit files or running the test check
+    $SUDO systemctl stop "$TIMER_FILE" "$LEARN_TIMER_FILE" 2>/dev/null || true
+    $SUDO systemctl stop "$SERVICE_FILE" "$LEARN_SERVICE_FILE" 2>/dev/null || true
+
     # Update service file with correct paths
     # Note: EnvironmentFile removed to avoid SELinux issues
     # The script loads .env file itself using python-dotenv
     SERVICE_CONTENT="[Unit]
-Description=Dell R730 Fan Control - GPU Aware
+Description=Dell R730 Fan Control - GPU & BlueField DPU Aware
 After=network.target
 
 [Service]
@@ -287,7 +317,7 @@ WantedBy=multi-user.target"
 
     # Update timer file
     ask "Enter check interval in seconds [$INTERVAL]: " "$INTERVAL" TIMER_INTERVAL
-    
+
     TIMER_CONTENT="[Unit]
 Description=Run Dell R730 Fan Control periodically
 Requires=dell-r730-fan-control.service
@@ -307,57 +337,17 @@ WantedBy=timers.target"
         echo -e "${RED}Error: Failed to create service file.${NC}"
         exit 1
     fi
-    
+
     if echo "$TIMER_CONTENT" | $SUDO tee "/etc/systemd/system/$TIMER_FILE" > /dev/null; then
         echo "Timer file created."
     else
         echo -e "${RED}Error: Failed to create timer file.${NC}"
         exit 1
     fi
-    
-    # Reload systemd
-    if $SUDO systemctl daemon-reload; then
-        echo "Systemd daemon reloaded."
-    else
-        echo -e "${RED}Error: Failed to reload systemd daemon.${NC}"
-        exit 1
-    fi
-    
-    # Enable timer
-    if $SUDO systemctl enable "$TIMER_FILE"; then
-        echo "Timer enabled."
-    else
-        echo -e "${RED}Error: Failed to enable timer.${NC}"
-        exit 1
-    fi
-    
-    # Start timer
-    if $SUDO systemctl start "$TIMER_FILE"; then
-        echo "Timer started."
-    else
-        echo -e "${RED}Error: Failed to start timer.${NC}"
-        echo -e "${YELLOW}You may need to check the service manually.${NC}"
-    fi
-    
-    # Verify timer is active
-    if $SUDO systemctl is-active --quiet "$TIMER_FILE"; then
-        echo -e "${GREEN}Systemd service installed and started successfully.${NC}"
-    else
-        echo -e "${YELLOW}Warning: Timer may not be active. Check status manually.${NC}"
-    fi
-    
-    echo "Service will run every ${TIMER_INTERVAL} seconds."
-    echo ""
-    echo "Useful commands:"
-    echo "  Check status: $SUDO systemctl status dell-r730-fan-control.timer"
-    echo "  View logs: $SUDO journalctl -u dell-r730-fan-control.service -f"
-    echo "  Stop: $SUDO systemctl stop dell-r730-fan-control.timer"
-    echo "  Start: $SUDO systemctl start dell-r730-fan-control.timer"
-    echo ""
-    
+
     # Install learning service and timer
     echo -e "${GREEN}Installing adaptive learning service...${NC}"
-    
+
     LEARN_SERVICE_CONTENT="[Unit]
 Description=Dell R730 Fan Control - Adaptive Learning
 After=network.target
@@ -372,7 +362,7 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target"
-    
+
     LEARN_TIMER_CONTENT="[Unit]
 Description=Run Dell R730 Fan Control Learning weekly
 Requires=$LEARN_SERVICE_FILE
@@ -385,67 +375,53 @@ RandomizedDelaySec=6h
 
 [Install]
 WantedBy=timers.target"
-    
-    # Write learning service file
+
     if echo "$LEARN_SERVICE_CONTENT" | $SUDO tee "/etc/systemd/system/$LEARN_SERVICE_FILE" > /dev/null; then
         echo "Learning service file created."
     else
         echo -e "${RED}Error: Failed to create learning service file.${NC}"
         exit 1
     fi
-    
-    # Write learning timer file
+
     if echo "$LEARN_TIMER_CONTENT" | $SUDO tee "/etc/systemd/system/$LEARN_TIMER_FILE" > /dev/null; then
         echo "Learning timer file created."
     else
         echo -e "${RED}Error: Failed to create learning timer file.${NC}"
         exit 1
     fi
-    
-    # Reload systemd
+
     if $SUDO systemctl daemon-reload; then
         echo "Systemd daemon reloaded."
     else
         echo -e "${RED}Error: Failed to reload systemd daemon.${NC}"
         exit 1
     fi
-    
-    # Enable learning timer
+
+    if $SUDO systemctl enable "$TIMER_FILE"; then
+        echo "Timer enabled (will start after verification test run)."
+    else
+        echo -e "${RED}Error: Failed to enable timer.${NC}"
+        exit 1
+    fi
+
     if $SUDO systemctl enable "$LEARN_TIMER_FILE"; then
         echo "Learning timer enabled (runs weekly)."
     else
         echo -e "${YELLOW}Warning: Failed to enable learning timer.${NC}"
     fi
-    
-    # Start learning timer
-    if $SUDO systemctl start "$LEARN_TIMER_FILE"; then
-        echo "Learning timer started."
-    else
-        echo -e "${YELLOW}Warning: Failed to start learning timer.${NC}"
-    fi
-    
-    echo ""
-    echo -e "${GREEN}Adaptive learning system installed.${NC}"
-    echo "  Learning analysis runs weekly to optimize thresholds"
-    echo "  Set AUTO_APPLY_LEARNING=true in .env to enable automatic threshold updates"
-    echo ""
-    echo "Useful commands:"
-    echo "  Check learning status: $SUDO systemctl status $LEARN_TIMER_FILE"
-    echo "  View learning logs: $SUDO journalctl -u $LEARN_SERVICE_FILE -f"
-    echo "  Run learning manually: $SUDO systemctl start $LEARN_SERVICE_FILE"
     echo ""
 
 # Install cron job
 elif [ "$INSTALL_METHOD" = "cron" ]; then
     echo ""
     echo -e "${GREEN}Installing cron job...${NC}"
-    
+
     ask "Enter check interval in seconds [$INTERVAL]: " "$INTERVAL" CRON_INTERVAL
     CRON_INTERVAL=${CRON_INTERVAL:-30}
-    
+
     PYTHON_PATH=$(which python3)
     CRON_CMD="$PYTHON_PATH $SCRIPT_DIR/$SCRIPT_NAME"
-    
+
     # Calculate cron schedule
     if [ "$CRON_INTERVAL" -ge 60 ]; then
         # For intervals >= 60 seconds, use standard cron format
@@ -468,7 +444,7 @@ elif [ "$INSTALL_METHOD" = "cron" ]; then
             exit 1
         fi
     fi
-    
+
     # Verify cron job was added
     echo ""
     echo "Current crontab entries:"
@@ -493,42 +469,63 @@ else
 fi
 echo ""
 
-# Test run
+# Test run (executed while timers are stopped so IPMI writes cannot overlap)
 echo -e "${GREEN}Performing test run...${NC}"
 echo ""
 
-# Check if .env has been configured
 DEFAULT_PASS_DETECTED=false
-if grep -q "^IDRAC_PASS=" "$SCRIPT_DIR/$ENV_FILE" 2>/dev/null; then
-    ENV_PASS=$(grep "^IDRAC_PASS=" "$SCRIPT_DIR/$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+if $SUDO grep -q "^IDRAC_PASS=" "$SCRIPT_DIR/$ENV_FILE" 2>/dev/null; then
+    ENV_PASS=$($SUDO grep "^IDRAC_PASS=" "$SCRIPT_DIR/$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     if [ "$ENV_PASS" = "calvin" ]; then
         DEFAULT_PASS_DETECTED=true
     fi
 fi
 
-if [ "$DEFAULT_PASS_DETECTED" = true ]; then
+TEST_PASSED=true
+if [ "$DEFAULT_PASS_DETECTED" = true ] && [ "$NON_INTERACTIVE" = false ]; then
     echo -e "${YELLOW}Warning: Default password detected in .env file.${NC}"
-    echo -e "${YELLOW}Please update $SCRIPT_DIR/$ENV_FILE with your actual iDRAC credentials before running.${NC}"
+    echo -e "${YELLOW}Please update $SCRIPT_DIR/$ENV_FILE with your actual iDRAC credentials if changed from factory default.${NC}"
     ask "Continue with test run anyway? [y/N]: " N TEST_RUN
     if [[ ! "$TEST_RUN" =~ ^[Yy]$ ]]; then
         echo "Skipping test run."
         echo -e "${YELLOW}Remember to update .env file before using the script!${NC}"
     else
-        echo "Running test with default credentials..."
-        if python3 "$SCRIPT_DIR/$SCRIPT_NAME" 2>&1; then
-            echo -e "${GREEN}Test run completed.${NC}"
+        echo "Running test..."
+        if [ "$INSTALL_METHOD" = "systemd" ]; then
+            $SUDO systemctl start "$SERVICE_FILE" || TEST_PASSED=false
         else
-            echo -e "${YELLOW}Test run completed with warnings (may be due to default credentials).${NC}"
+            $SUDO python3 "$SCRIPT_DIR/$SCRIPT_NAME" 2>&1 || TEST_PASSED=false
         fi
     fi
 else
     echo "Running test..."
-    if python3 "$SCRIPT_DIR/$SCRIPT_NAME" 2>&1; then
-        echo -e "${GREEN}Test run completed successfully.${NC}"
+    if [ "$INSTALL_METHOD" = "systemd" ]; then
+        if $SUDO systemctl start "$SERVICE_FILE"; then
+            echo -e "${GREEN}Test run completed successfully.${NC}"
+        else
+            TEST_PASSED=false
+            echo -e "${RED}Error: Service test run failed. Timers will NOT be started.${NC}"
+            $SUDO journalctl -u "$SERVICE_FILE" -n 15 --no-pager || true
+            exit 1
+        fi
     else
-        echo -e "${YELLOW}Warning: Test run completed with errors. Check the output above.${NC}"
-        echo -e "${YELLOW}You may need to verify your iDRAC credentials in .env file.${NC}"
+        if $SUDO python3 "$SCRIPT_DIR/$SCRIPT_NAME" 2>&1; then
+            echo -e "${GREEN}Test run completed successfully.${NC}"
+        else
+            TEST_PASSED=false
+            echo -e "${YELLOW}Warning: Test run completed with errors. Check the output above.${NC}"
+        fi
     fi
+fi
+
+if [ "$INSTALL_METHOD" = "systemd" ] && [ "$TEST_PASSED" = true ]; then
+    if $SUDO systemctl start "$TIMER_FILE"; then
+        echo "Timer started (every ${TIMER_INTERVAL}s)."
+    else
+        echo -e "${RED}Error: Failed to start $TIMER_FILE.${NC}"
+        exit 1
+    fi
+    $SUDO systemctl start "$LEARN_TIMER_FILE" 2>/dev/null || echo -e "${YELLOW}Warning: Failed to start $LEARN_TIMER_FILE.${NC}"
 fi
 
 echo ""
@@ -551,12 +548,12 @@ if [ "$INSTALL_METHOD" = "systemd" ]; then
     else
         echo -e "${YELLOW}⚠ Timer is not active${NC}"
     fi
-    
+
     # Show timer status
     echo ""
     echo "Timer status:"
     $SUDO systemctl status "$TIMER_FILE" --no-pager -l | head -10 || true
-    
+
     # Check if service has run
     echo ""
     echo "Last service run:"
@@ -569,7 +566,7 @@ if [ "$INSTALL_METHOD" = "systemd" ]; then
         echo "Recent output:"
         $SUDO journalctl -u "$SERVICE_FILE" -n 10 --no-pager | tail -5 || true
     fi
-    
+
 elif [ "$INSTALL_METHOD" = "cron" ]; then
     echo "  Service: cron job (every ${CRON_INTERVAL}s)"
     echo ""
@@ -605,4 +602,3 @@ echo "  4. Monitor logs: tail -f $LOG_FILE_PATH"
 echo ""
 echo -e "${GREEN}Installation script completed successfully!${NC}"
 echo ""
-
