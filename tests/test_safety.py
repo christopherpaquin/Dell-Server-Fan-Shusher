@@ -361,3 +361,20 @@ def test_history_commands_parse_bluefield_and_legacy_logs(tmp_path, monkeypatch,
     detailed = capsys.readouterr().out
     assert "BlueField Temperature History:" in detailed
     assert "61°C (max: 61°C)" in detailed
+
+
+def test_inlet_exhaust_parses_sdr_entity_id_and_sensor_list_formats(monkeypatch):
+    sdr_out = (
+        "Inlet Temp       | 04h | ok  |  7.1 | 23 degrees C\n"
+        "Exhaust Temp     | 01h | ok  |  7.1 | 28 degrees C\n"
+        "Temp             | 0Eh | ok  |  3.1 | 32 degrees C\n"
+    )
+    monkeypatch.setattr(fc, "run_ipmi_command", lambda args, **kw: (True, sdr_out, ""))
+    assert fc.get_inlet_exhaust_temps() == {"inlet": 23, "exhaust": 28, "differential": 5}
+
+    sensor_list_out = (
+        "Inlet Temp       | 24.000     | degrees C  | ok    | na | -7.000 | 3.000 | 42.000 | 47.000 | na\n"
+        "Exhaust Temp     | 31.000     | degrees C  | ok    | na | 0.000  | 0.000 | 70.000 | 75.000 | na\n"
+    )
+    monkeypatch.setattr(fc, "run_ipmi_command", lambda args, **kw: (True, sensor_list_out, ""))
+    assert fc.get_inlet_exhaust_temps() == {"inlet": 24, "exhaust": 31, "differential": 7}

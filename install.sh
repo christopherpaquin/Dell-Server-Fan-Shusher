@@ -249,7 +249,8 @@ fi
 echo ""
 
 # Create log directory
-LOG_FILE_PATH=$(grep "^LOG_FILE=" "$SCRIPT_DIR/$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "/var/log/dell-r730-fan-control.log")
+LOG_FILE_PATH=$($SUDO grep "^LOG_FILE=" "$SCRIPT_DIR/$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2 | tr -d '"' || echo "/var/log/dell-r730-fan-control.log")
+LOG_FILE_PATH=${LOG_FILE_PATH:-/var/log/dell-r730-fan-control.log}
 LOG_DIR_PATH=$(dirname "$LOG_FILE_PATH")
 
 if [ ! -d "$LOG_DIR_PATH" ]; then

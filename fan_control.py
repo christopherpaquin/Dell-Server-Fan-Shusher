@@ -694,7 +694,7 @@ def get_inlet_exhaust_temps():
     result = {}
     for line in stdout.split('\n'):
         if 'Inlet Temp' in line:
-            match = re.search(r'\|\s*([+\-]?\d+(?:\.\d+)?)\s*(?:degrees\s*C|\|)', line, re.IGNORECASE)
+            match = re.search(r'\|\s*([+\-]?\d+(?:\.\d+)?)\s*(?:\|\s*)?degrees\s*C', line, re.IGNORECASE)
             if match:
                 try:
                     val = int(float(match.group(1)))
@@ -703,7 +703,7 @@ def get_inlet_exhaust_temps():
                 except (ValueError, TypeError):
                     pass
         elif 'Exhaust Temp' in line:
-            match = re.search(r'\|\s*([+\-]?\d+(?:\.\d+)?)\s*(?:degrees\s*C|\|)', line, re.IGNORECASE)
+            match = re.search(r'\|\s*([+\-]?\d+(?:\.\d+)?)\s*(?:\|\s*)?degrees\s*C', line, re.IGNORECASE)
             if match:
                 try:
                     val = int(float(match.group(1)))
